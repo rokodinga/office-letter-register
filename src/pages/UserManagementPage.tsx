@@ -129,7 +129,7 @@ export function UserManagementPage() {
                         <div><div className="font-semibold text-slate-900">{item.displayName || 'Unnamed user'}</div><div className="text-sm text-slate-500">{item.email}</div></div>
                       </div>
                     </td>
-                    <td className="px-5 py-4"><select disabled={busyUid === item.uid} value={item.role || 'user'} onChange={(e) => void updateUser(item.uid, { role: e.target.value as UserRole })} className="border rounded-lg px-3 py-2 bg-white text-slate-900"><option value="user">User</option><option value="admin">Administrator</option></select></td>
+                    <td className="px-5 py-4"><select disabled={busyUid === item.uid} value={item.role || 'User'} onChange={(e) => void updateUser(item.uid, { role: e.target.value as UserRole })} className="border rounded-lg px-3 py-2 bg-white text-slate-900"><option value="User">User</option><option value="Administrator">Administrator</option></select></td>
                     <td className="px-5 py-4"><span className={item.status === 'disabled' ? 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700' : 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700'}>{item.status === 'disabled' ? <UserX size={14} /> : <UserCheck size={14} />}{item.status === 'disabled' ? 'Disabled' : 'Active'}</span></td>
                     <td className="px-5 py-4 text-sm">{item.emailVerified ? <span className="text-green-700 font-semibold">Verified</span> : <span className="text-amber-700 font-semibold">Not verified</span>}</td>
                     <td className="px-5 py-4 text-sm text-slate-600">{formatDate(item.lastSignInTime)}</td>
@@ -164,7 +164,7 @@ export function UserManagementPage() {
                 <div><h3 className="text-2xl font-bold text-slate-900">{selectedUser.displayName || 'Unnamed user'}</h3><p className="text-slate-500 break-all">{selectedUser.email}</p></div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
-                <div className="rounded-lg bg-slate-50 p-4"><span className="text-xs text-slate-500">Role</span><p className="font-semibold text-slate-900 mt-1">{selectedUser.role === 'admin' ? 'Administrator' : 'User'}</p></div>
+                <div className="rounded-lg bg-slate-50 p-4"><span className="text-xs text-slate-500">Role</span><p className="font-semibold text-slate-900 mt-1">{selectedUser.role === 'Administrator' ? 'Administrator' : 'User'}</p></div>
                 <div className="rounded-lg bg-slate-50 p-4"><span className="text-xs text-slate-500">Status</span><p className={`font-semibold mt-1 ${selectedUser.status === 'disabled' ? 'text-red-700' : 'text-green-700'}`}>{selectedUser.status === 'disabled' ? 'Disabled' : 'Active'}</p></div>
                 <div className="rounded-lg bg-slate-50 p-4"><span className="text-xs text-slate-500">Email verification</span><p className={`font-semibold mt-1 ${selectedUser.emailVerified ? 'text-green-700' : 'text-amber-700'}`}>{selectedUser.emailVerified ? 'Verified' : 'Not verified'}</p></div>
                 <div className="rounded-lg bg-slate-50 p-4"><span className="text-xs text-slate-500">Last sign-in</span><p className="font-semibold text-slate-900 mt-1">{formatDate(selectedUser.lastSignInTime)}</p></div>
