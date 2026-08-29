@@ -13,6 +13,7 @@ import {
 import { ArrowLeft, Edit3, Plus, Search, Trash2, X } from 'lucide-react';
 import { db } from '../firebase/config';
 import { useAuth } from '../firebase/auth-context';
+import { AttachmentsSection, type LetterAttachment } from '../components/AttachmentsSection';
 
 type LetterType = 'incoming' | 'outgoing';
 
@@ -30,6 +31,7 @@ interface Letter {
   fileNo?: string;
   reference?: string;
   remarks?: string;
+  attachments?: LetterAttachment[];
 }
 
 interface FormData {
@@ -40,9 +42,10 @@ interface FormData {
   fileNo: string;
   reference: string;
   remarks: string;
+  attachments: LetterAttachment[];
 }
 
-const emptyForm: FormData = {
+const emptyForm = (): FormData => ({
   number: '',
   date: new Date().toISOString().slice(0, 10),
   party: '',
@@ -50,7 +53,8 @@ const emptyForm: FormData = {
   fileNo: '',
   reference: '',
   remarks: '',
-};
+  attachments: [],
+});
 
 export function LetterRegisterPage({ type }: { type: LetterType }) {
   const { userProfile } = useAuth();
@@ -65,6 +69,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [viewingAttachments, setViewingAttachments] = useState<LetterAttachment[] | null>(null);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -90,6 +95,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             letter.letterNo, letter.dispatchNo, letter.date, letter.dispatchDate,
             letter.receivedDate, letter.from, letter.to, letter.addressee,
             letter.subject, letter.fileNo, letter.reference, letter.remarks,
+            ...(letter.attachments || []).map((item) => item.name),
           ].filter(Boolean).join(' ').toLowerCase().includes(q)
         );
 
@@ -103,7 +109,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   const openNew = () => {
     if (!isAdmin) return;
     setEditingId(null);
-    setForm({ ...emptyForm, date: new Date().toISOString().slice(0, 10) });
+    setForm(emptyForm());
     setError('');
     setMessage('');
     setShowForm(true);
@@ -120,6 +126,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       fileNo: letter.fileNo || '',
       reference: letter.reference || '',
       remarks: letter.remarks || '',
+      attachments: letter.attachments || [],
     });
     setError('');
     setMessage('');
@@ -153,6 +160,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             fileNo: form.fileNo,
             reference: form.reference,
             remarks: form.remarks,
+            attachments: form.attachments,
             updatedAt: serverTimestamp(),
           }
         : {
@@ -163,6 +171,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             fileNo: form.fileNo,
             reference: form.reference,
             remarks: form.remarks,
+            attachments: form.attachments,
             updatedAt: serverTimestamp(),
           };
 
@@ -176,7 +185,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
 
       setShowForm(false);
       setEditingId(null);
-      setForm(emptyForm);
+      setForm(emptyForm());
     } catch (err) {
       const firebaseError = err as { code?: string; message?: string };
       if (firebaseError.code === 'permission-denied') {
@@ -272,6 +281,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                     <th className="text-left px-4 py-3">Subject</th>
                     <th className="text-left px-4 py-3">File No.</th>
                     <th className="text-left px-4 py-3">Reference</th>
+                    <th className="text-left px-4 py-3">Attachments</th>
                     {isAdmin && <th className="text-left px-4 py-3">Actions</th>}
                   </tr>
                 </thead>
@@ -284,6 +294,17 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                       <td className="px-4 py-4 min-w-[220px]">{letter.subject || '—'}</td>
                       <td className="px-4 py-4">{letter.fileNo || '—'}</td>
                       <td className="px-4 py-4">{letter.reference || '—'}</td>
+                      <td className="px-4 py-4">
+                        {letter.attachments?.length ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingAttachments(letter.attachments || [])}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                          >
+                            <Paperclip size={15} /> {letter.attachments.length}
+                          </button>
+                        ) : <span className="text-slate-400">—</span>}
+                      </td>
                       {isAdmin && (
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
@@ -350,6 +371,11 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                 <textarea rows={3} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} className="w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" />
               </label>
 
+              <AttachmentsSection
+                attachments={form.attachments}
+                setAttachments={(attachments) => setForm({ ...form, attachments })}
+              />
+
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeForm} disabled={saving} className="px-5 py-3 border rounded-lg font-semibold">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-semibold">
@@ -357,6 +383,34 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewingAttachments && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewingAttachments(null); }}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Attachments</h2>
+                <p className="text-sm text-slate-500">{viewingAttachments.length} linked item{viewingAttachments.length === 1 ? '' : 's'}</p>
+              </div>
+              <button onClick={() => setViewingAttachments(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20} /></button>
+            </div>
+            <div className="max-h-[70vh] space-y-2 overflow-y-auto p-5">
+              {viewingAttachments.map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-50 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900">{item.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {item.kind === 'email' ? (item.direction === 'received' ? 'Received Email' : 'Sent Email') : 'Google Drive'}
+                      {item.kind === 'email' && item.date ? ' • ' + item.date : ''}
+                    </div>
+                  </div>
+                  <a href={item.url} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open</a>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
