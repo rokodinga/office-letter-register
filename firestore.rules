@@ -49,6 +49,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Gmail OAuth refresh tokens are server-side only.
+    match /gmailConnections/{connectionId} {
+      allow read, write: if false;
+    }
+
     match /incomingLetters/{letterId} {
       allow read: if signedIn();
       allow create, update, delete: if isAdmin();
