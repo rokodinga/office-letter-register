@@ -54,7 +54,7 @@ const emptyForm: FormData = {
 
 export function LetterRegisterPage({ type }: { type: LetterType }) {
   const { userProfile } = useAuth();
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === 'Administrator';
   const collectionName = type === 'incoming' ? 'incomingLetters' : 'outgoingLetters';
   const title = type === 'incoming' ? 'Incoming Letter Register' : 'Outgoing Letter Register';
   const partyLabel = type === 'incoming' ? 'From / Sender' : 'To / Addressee';
@@ -68,6 +68,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -104,6 +105,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     setEditingId(null);
     setForm({ ...emptyForm, date: new Date().toISOString().slice(0, 10) });
     setError('');
+    setMessage('');
     setShowForm(true);
   };
 
@@ -120,6 +122,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       remarks: letter.remarks || '',
     });
     setError('');
+    setMessage('');
     setShowForm(true);
   };
 
@@ -138,6 +141,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     }
     setSaving(true);
     setError('');
+    setMessage('');
 
     try {
       const data = type === 'incoming'
@@ -164,15 +168,22 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
 
       if (editingId) {
         await updateDoc(doc(db, collectionName, editingId), data);
+        setMessage('Letter updated successfully.');
       } else {
         await addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
+        setMessage('Letter registered successfully.');
       }
 
       setShowForm(false);
       setEditingId(null);
       setForm(emptyForm);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save the letter.');
+      const firebaseError = err as { code?: string; message?: string };
+      if (firebaseError.code === 'permission-denied') {
+        setError('Permission denied. Your administrator session may be stale. Sign out and sign in again, then retry.');
+      } else {
+        setError(firebaseError.message || 'Unable to save the letter.');
+      }
     } finally {
       setSaving(false);
     }
@@ -184,10 +195,18 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       return;
     }
     if (!window.confirm('Delete this letter record? This cannot be undone.')) return;
+    setError('');
+    setMessage('');
     try {
       await deleteDoc(doc(db, collectionName, id));
+      setMessage('Letter deleted successfully.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to delete the letter.');
+      const firebaseError = err as { code?: string; message?: string };
+      if (firebaseError.code === 'permission-denied') {
+        setError('Permission denied. Your administrator session may be stale. Sign out and sign in again, then retry.');
+      } else {
+        setError(firebaseError.message || 'Unable to delete the letter.');
+      }
     }
   };
 
@@ -221,6 +240,9 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
           </div>
         )}
 
+        {message && <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-700">{message}</div>}
+        {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
+
         <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-3 text-slate-400" size={20} />
@@ -232,8 +254,6 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             />
           </div>
         </div>
-
-        {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
 
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           {filteredLetters.length === 0 ? (
@@ -268,7 +288,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
                             <button onClick={() => openEdit(letter)} title="Edit" className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Edit3 size={17} /></button>
-                            <button onClick={() => removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"><Trash2 size={17} /></button>
+                            <button onClick={() => void removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"><Trash2 size={17} /></button>
                           </div>
                         </td>
                       )}
