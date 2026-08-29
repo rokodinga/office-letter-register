@@ -335,6 +335,7 @@ export default async function handler(req, res) {
       const connections = await db.collection('gmailConnections').where('active', '==', true).get();
       let processed = 0;
       let createdPending = 0;
+      const errors = [];
 
       for (const item of connections.docs) {
         const data = item.data();
@@ -345,15 +346,17 @@ export default async function handler(req, res) {
           processed += result.processed;
           createdPending += result.createdPending;
         } catch (error) {
+          const message = error instanceof Error ? error.message : 'Gmail sync failed.';
           console.error(`Gmail sync failed for ${item.id}:`, error);
+          errors.push({ connectionId: item.id, error: message });
           await item.ref.set({
-            lastError: error instanceof Error ? error.message : 'Gmail sync failed.',
+            lastError: message,
             lastErrorAt: FieldValue.serverTimestamp(),
           }, { merge: true });
         }
       }
 
-      return res.status(200).json({ ok: true, processed, createdPending });
+      return res.status(200).json({ ok: errors.length === 0, processed, createdPending, errors });
     }
 
     return res.status(400).json({ error: 'Unknown Gmail operation.' });
