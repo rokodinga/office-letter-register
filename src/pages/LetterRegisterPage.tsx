@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addDoc,
@@ -28,8 +29,6 @@ interface Letter {
   fileNo?: string;
   reference?: string;
   remarks?: string;
-  createdAt?: { seconds: number };
-  updatedAt?: { seconds: number };
 }
 
 interface FormData {
@@ -71,9 +70,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     const unsubscribe = onSnapshot(
       collection(db, collectionName),
       (snapshot) => {
-        setLetters(
-          snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Letter))
-        );
+        setLetters(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Letter)));
       },
       (err) => setError(err.message)
     );
@@ -86,23 +83,10 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       ? letters
       : letters.filter((letter) =>
           [
-            letter.letterNo,
-            letter.dispatchNo,
-            letter.date,
-            letter.dispatchDate,
-            letter.receivedDate,
-            letter.from,
-            letter.to,
-            letter.addressee,
-            letter.subject,
-            letter.fileNo,
-            letter.reference,
-            letter.remarks,
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-            .includes(q)
+            letter.letterNo, letter.dispatchNo, letter.date, letter.dispatchDate,
+            letter.receivedDate, letter.from, letter.to, letter.addressee,
+            letter.subject, letter.fileNo, letter.reference, letter.remarks,
+          ].filter(Boolean).join(' ').toLowerCase().includes(q)
         );
 
     return [...result].sort((a, b) => {
@@ -172,10 +156,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       if (editingId) {
         await updateDoc(doc(db, collectionName, editingId), data);
       } else {
-        await addDoc(collection(db, collectionName), {
-          ...data,
-          createdAt: serverTimestamp(),
-        });
+        await addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
       }
 
       setShowForm(false);
@@ -231,9 +212,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
           </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>
-        )}
+        {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
 
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           {filteredLetters.length === 0 ? (
@@ -266,12 +245,8 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                       <td className="px-4 py-4">{letter.reference || '—'}</td>
                       <td className="px-4 py-4">
                         <div className="flex gap-2">
-                          <button onClick={() => openEdit(letter)} title="Edit" className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100">
-                            <Edit3 size={17} />
-                          </button>
-                          <button onClick={() => removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100">
-                            <Trash2 size={17} />
-                          </button>
+                          <button onClick={() => openEdit(letter)} title="Edit" className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Edit3 size={17} /></button>
+                          <button onClick={() => removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"><Trash2 size={17} /></button>
                         </div>
                       </td>
                     </tr>
