@@ -196,6 +196,7 @@ async function syncMailbox(db, connectionId, refreshToken) {
           registered: false,
           reviewStatus: 'pending',
         }, { merge: true });
+        createdPending += 1;
       }
 
       processed += 1;
