@@ -6,6 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
   User,
+  AuthError,
 } from 'firebase/auth';
 
 interface AuthContextType {
@@ -35,7 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      console.error('Signup error:', error);
+      const authError = error as AuthError;
+      console.error('Signup error:', authError.message);
       throw error;
     }
   };
@@ -44,7 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      console.error('Login error:', error);
+      const authError = error as AuthError;
+      console.error('Login error:', authError.message);
       throw error;
     }
   };
@@ -53,7 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error('Logout error:', error);
+      const authError = error as AuthError;
+      console.error('Logout error:', authError.message);
       throw error;
     }
   };
