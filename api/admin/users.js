@@ -22,7 +22,7 @@ async function requireAdmin(req) {
   const decoded = await adminAuth.verifyIdToken(bearer(req));
   const snap = await adminDb.collection('users').doc(decoded.uid).get();
   const profile = snap.data();
-  if (!profile || profile.role !== 'admin' || profile.status !== 'active') {
+  if (!profile || profile.role !== 'Administrator' || profile.status !== 'active') {
     throw new Error('Administrator permission required.');
   }
   return { adminAuth, adminDb, actor: decoded };
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         displayName: account.displayName || profileMap.get(account.uid)?.displayName || '',
         email: account.email || profileMap.get(account.uid)?.email || '',
         photoURL: account.photoURL || profileMap.get(account.uid)?.photoURL || '',
-        role: profileMap.get(account.uid)?.role || 'user',
+        role: profileMap.get(account.uid)?.role || 'User',
         status: account.disabled ? 'disabled' : (profileMap.get(account.uid)?.status || 'active'),
         emailVerified: account.emailVerified,
         createdAt: account.metadata.creationTime || null,
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const { uid, role, status } = req.body || {};
-      if (!uid || (role !== undefined && !['user', 'admin'].includes(role)) ||
+      if (!uid || (role !== undefined && !['User', 'Administrator'].includes(role)) ||
           (status !== undefined && !['active', 'disabled'].includes(status))) {
         return res.status(400).json({ error: 'Invalid user update.' });
       }
@@ -72,10 +72,10 @@ export default async function handler(req, res) {
       if (!target.exists) return res.status(404).json({ error: 'User profile not found.' });
       const current = target.data() || {};
 
-      if ((current.role === 'admin' && role === 'user') ||
+      if ((current.role === 'Administrator' && role === 'User') ||
           (status === 'disabled' && current.role === 'admin')) {
         const admins = await adminDb.collection('users')
-          .where('role', '==', 'admin').where('status', '==', 'active').get();
+          .where('role', '==', 'Administrator').where('status', '==', 'active').get();
         if (admins.size <= 1) {
           return res.status(400).json({ error: 'The last active administrator cannot be removed or disabled.' });
         }
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
 
       if (action === 'delete') {
         const data = target.data() || {};
-        if (data.role === 'admin') {
+        if (data.role === 'Administrator') {
           const admins = await adminDb.collection('users')
             .where('role', '==', 'admin').where('status', '==', 'active').get();
           if (admins.size <= 1) {
