@@ -140,7 +140,7 @@ async function syncMailbox(db, connectionId, refreshToken) {
   const profile = await gmailProfile(token);
   let pageToken = '';
   let processed = 0;
-  let createdIncoming = 0;
+  let createdPending = 0;
 
   do {
     const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
@@ -189,47 +189,12 @@ async function syncMailbox(db, connectionId, refreshToken) {
       }, { merge: true });
 
       if (!existing?.registeredLetterId) {
-        const incomingId = `gmail-${detail.id}`;
-        const incomingRef = db.collection('incomingLetters').doc(incomingId);
-        const incoming = await incomingRef.get();
-
-        if (!incoming.exists) {
-          await incomingRef.set({
-            letterNo: `GMAIL-${receivedDate}-${detail.id.slice(0, 8)}`,
-            receivedDate,
-            from: from || 'Unknown sender',
-            subject,
-            fileNo: '',
-            reference: '',
-            remarks: detail.snippet || '',
-            status: 'Pending Review',
-            source: 'gmail',
-            gmailMessageId: detail.id,
-            gmailThreadId: detail.threadId || null,
-            gmailAccount: profile.emailAddress || null,
-            attachments: [{
-              kind: 'email',
-              id: detail.id,
-              name: subject,
-              url: gmailUrl,
-              direction: 'received',
-              subject,
-              ...(from ? { from } : {}),
-              ...(to ? { to } : {}),
-              ...(date ? { date } : {}),
-            }],
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-            syncedAt: FieldValue.serverTimestamp(),
-          });
-          createdIncoming += 1;
-        }
-
+        // Gmail synchronization only imports the message into the review queue.
+        // It must never create an official Incoming Dak record without an administrator
+        // explicitly reviewing and registering it from the UI.
         await gmailRef.set({
-          registered: true,
-          registeredLetterId: incomingId,
-          registeredAt: FieldValue.serverTimestamp(),
-          registeredBy: 'gmail-sync',
+          registered: false,
+          reviewStatus: 'pending',
         }, { merge: true });
       }
 
@@ -245,7 +210,7 @@ async function syncMailbox(db, connectionId, refreshToken) {
     active: true,
   }, { merge: true });
 
-  return { processed, createdIncoming, email: profile.emailAddress || null };
+  return { processed, createdPending, email: profile.emailAddress || null };
 }
 
 export default async function handler(req, res) {
@@ -331,7 +296,7 @@ export default async function handler(req, res) {
       const db = getAdminDb();
       const connections = await db.collection('gmailConnections').where('active', '==', true).get();
       let processed = 0;
-      let createdIncoming = 0;
+      let createdPending = 0;
 
       for (const item of connections.docs) {
         const data = item.data();
@@ -340,7 +305,7 @@ export default async function handler(req, res) {
         try {
           const result = await syncMailbox(db, item.id, data.refreshToken);
           processed += result.processed;
-          createdIncoming += result.createdIncoming;
+          createdPending += result.createdPending;
         } catch (error) {
           console.error(`Gmail sync failed for ${item.id}:`, error);
           await item.ref.set({
@@ -350,7 +315,7 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ ok: true, processed, createdIncoming });
+      return res.status(200).json({ ok: true, processed, createdPending });
     }
 
     return res.status(400).json({ error: 'Unknown Gmail operation.' });
