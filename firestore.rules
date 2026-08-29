@@ -38,6 +38,11 @@ service cloud.firestore {
       allow delete: if isAdmin() && userId != request.auth.uid;
     }
 
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /incomingLetters/{letterId} {
       allow read, create, update, delete: if signedIn();
     }
