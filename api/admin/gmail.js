@@ -281,6 +281,43 @@ export default async function handler(req, res) {
       });
     }
 
+    if (mode === 'cleanup-legacy') {
+      await verifyAdmin(req);
+      const db = getAdminDb();
+
+      const incoming = await db.collection('incomingLetters').get();
+      const incomingBatch = db.batch();
+      let deletedIncoming = 0;
+
+      for (const item of incoming.docs) {
+        const data = item.data();
+        if (item.id.startsWith('gmail-') && data?.source === 'gmail') {
+          incomingBatch.delete(item.ref);
+          deletedIncoming += 1;
+        }
+      }
+      if (deletedIncoming) await incomingBatch.commit();
+
+      const gmailInbox = await db.collection('gmailInbox').get();
+      const gmailBatch = db.batch();
+      let deletedGmailInbox = 0;
+
+      for (const item of gmailInbox.docs) {
+        const data = item.data();
+        if (data?.registeredBy === 'gmail-sync') {
+          gmailBatch.delete(item.ref);
+          deletedGmailInbox += 1;
+        }
+      }
+      if (deletedGmailInbox) await gmailBatch.commit();
+
+      return res.status(200).json({
+        ok: true,
+        deletedIncoming,
+        deletedGmailInbox,
+      });
+    }
+
     if (mode === 'disconnect') {
       const uid = await verifyAdmin(req);
       const db = getAdminDb();
