@@ -113,6 +113,29 @@ export function GmailInboxPage() {
     }
   };
 
+  const cleanupLegacyGmail = async () => {
+    if (!window.confirm('Delete all old Gmail-imported Incoming Dak records created by the previous automatic-sync workflow? This will not delete anything from Gmail.')) return;
+
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const data = await apiRequest('cleanup-legacy', 'POST');
+      await reloadInbox();
+      setMessage(
+        'Legacy Gmail cleanup complete. Deleted ' +
+        (data.deletedIncoming || 0) +
+        ' old Incoming Dak records and ' +
+        (data.deletedGmailInbox || 0) +
+        ' old Gmail queue records. Gmail messages themselves were not deleted.',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to clean up legacy Gmail imports.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const disconnectGmail = async () => {
     if (!window.confirm('Disconnect Gmail from Office Letter Register? Existing Incoming Dak records will not be deleted.')) return;
 
@@ -181,6 +204,13 @@ export function GmailInboxPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => void cleanupLegacyGmail()}
+              disabled={busy}
+              className="inline-flex items-center gap-2 border border-amber-200 bg-white hover:bg-amber-50 disabled:opacity-60 text-amber-800 px-4 py-3 rounded-lg font-semibold"
+            >
+              Clear Old Gmail Imports
+            </button>
             {status.connected && (
               <button
                 onClick={() => void disconnectGmail()}
