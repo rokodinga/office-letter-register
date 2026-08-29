@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { ArrowLeft, Edit3, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Edit3, Paperclip, Plus, Search, Trash2, X } from 'lucide-react';
 import { db } from '../firebase/config';
 import { useAuth } from '../firebase/auth-context';
 import { AttachmentsSection, type LetterAttachment } from '../components/AttachmentsSection';
