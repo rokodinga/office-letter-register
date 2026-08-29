@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../firebase/auth-context';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { FirebaseError } from 'firebase/app';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -20,7 +21,7 @@ export function LoginPage() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to login';
+      const errorMessage = err instanceof FirebaseError ? err.message : 'Failed to login';
       setError(errorMessage);
     } finally {
       setLoading(false);
