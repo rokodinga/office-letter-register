@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -58,6 +59,7 @@ const emptyForm = (): FormData => ({
 
 export function LetterRegisterPage({ type }: { type: LetterType }) {
   const { userProfile } = useAuth();
+  const [searchParams] = useSearchParams();
   const isAdmin = userProfile?.role === 'Administrator';
   const collectionName = type === 'incoming' ? 'incomingLetters' : 'outgoingLetters';
   const title = type === 'incoming' ? 'Incoming Letter Register' : 'Outgoing Letter Register';
@@ -74,6 +76,48 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!isAdmin || type !== 'incoming') return;
+    const gmailId = searchParams.get('gmailId');
+    if (!gmailId) return;
+    let active = true;
+    (async () => {
+      try {
+        const snapshot = await getDoc(doc(db, 'gmailInbox', gmailId));
+        if (!active || !snapshot.exists()) return;
+        const mail = snapshot.data() as {
+          subject?: string; from?: string; to?: string; date?: string; url?: string; id?: string;
+        };
+        setEditingId(null);
+        setForm({
+          number: '',
+          date: mail.date ? new Date(mail.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          party: mail.from || '',
+          subject: mail.subject || '',
+          fileNo: '',
+          reference: '',
+          remarks: '',
+          attachments: [{
+            kind: 'email',
+            id: mail.id || gmailId,
+            name: mail.subject || 'Received Email',
+            url: mail.url || `https://mail.google.com/mail/u/0/#inbox/${gmailId}`,
+            direction: 'received',
+            subject: mail.subject || '',
+            from: mail.from,
+            to: mail.to,
+            date: mail.date,
+          }],
+        });
+        setShowForm(true);
+        setMessage('Gmail message loaded. Complete the office fields and register it as Incoming Dak.');
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : 'Unable to load the Gmail message.');
+      }
+    })();
+    return () => { active = false; };
+  }, [isAdmin, type, searchParams]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -179,7 +223,16 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         await updateDoc(doc(db, collectionName, editingId), data);
         setMessage('Letter updated successfully.');
       } else {
-        await addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
+        const created = await addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
+        const gmailAttachment = type === 'incoming' ? form.attachments.find((item) => item.kind === 'email' && item.direction === 'received') : undefined;
+        if (gmailAttachment) {
+          await setDoc(doc(db, 'gmailInbox', gmailAttachment.id), {
+            registered: true,
+            registeredLetterId: created.id,
+            registeredAt: serverTimestamp(),
+            registeredBy: userProfile?.uid || '',
+          }, { merge: true });
+        }
         setMessage('Letter registered successfully.');
       }
 
