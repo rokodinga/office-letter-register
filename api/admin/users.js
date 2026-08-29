@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         role: profileMap.get(account.uid)?.role || 'user',
         status: account.disabled ? 'disabled' : (profileMap.get(account.uid)?.status || 'active'),
         emailVerified: account.emailVerified,
-        createdAt: profileMap.get(account.uid)?.createdAt || null,
+        createdAt: account.metadata.creationTime || null,
         lastSignInTime: account.metadata.lastSignInTime || null,
       }));
       return res.status(200).json({ users });
