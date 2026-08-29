@@ -1,16 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, doc, getDocs, limit, query, orderBy } from 'firebase/firestore';
-import { ArrowLeft, CheckCircle2, Inbox, Loader2, Mail, RefreshCw, Search, ShieldAlert, ExternalLink } from 'lucide-react';
-import { auth, db } from '../firebase/config';
+import { collection, getDocs, limit, query, orderBy } from 'firebase/firestore';
+import { ArrowLeft, CheckCircle2, Inbox, Loader2, Mail, RefreshCw, Search, ShieldAlert, ExternalLink, Unplug } from 'lucide-react';
+import { db, auth } from '../firebase/config';
 import { getIdToken } from 'firebase/auth';
 import { useAuth } from '../firebase/auth-context';
-
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
 
 type GmailItem = {
   id: string;
@@ -25,46 +19,75 @@ type GmailItem = {
   registeredLetterId?: string;
 };
 
-function gmailUrl(id: string) {
-  return `https://mail.google.com/mail/u/0/#inbox/${id}`;
+type GmailStatus = {
+  connected: boolean;
+  email?: string | null;
+  connectedAt?: string | null;
+  lastSyncAt?: string | null;
+};
+
+async function apiRequest(mode: string, method = 'GET') {
+  const token = await getIdToken(auth.currentUser!, true);
+  const response = await fetch(`/api/admin/gmail?mode=${encodeURIComponent(mode)}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Gmail request failed.');
+  return data;
 }
 
 export function GmailInboxPage() {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
   const isAdmin = userProfile?.role === 'Administrator';
+
   const [items, setItems] = useState<GmailItem[]>([]);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [status, setStatus] = useState<GmailStatus>({ connected: false });
+
+  const reloadInbox = async () => {
+    const snapshot = await getDocs(
+      query(collection(db, 'gmailInbox'), orderBy('receivedAt', 'desc'), limit(200)),
+    );
+    setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailItem)));
+  };
+
+  const loadStatus = async () => {
+    const data = await apiRequest('status');
+    setStatus(data);
+  };
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     (async () => {
       try {
-        const snapshot = await getDocs(query(collection(db, 'gmailInbox'), orderBy('receivedAt', 'desc'), limit(200)));
-        if (active) setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailItem)));
+        await Promise.all([reloadInbox(), loadStatus()]);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : 'Unable to load Gmail inbox.');
+        if (active) setError(err instanceof Error ? err.message : 'Unable to load Gmail status.');
       } finally {
         if (active) setLoading(false);
       }
     })();
+
     return () => { active = false; };
   }, [isAdmin]);
 
   const connectGmail = async () => {
     setBusy(true);
     setError('');
+    setMessage('');
     try {
-      const token = await getIdToken(auth.currentUser!, true);
-      const response = await fetch('/api/admin/gmail?mode=auth', { headers: { Authorization: `Bearer ${token}` } });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to start Gmail connection.');
+      const data = await apiRequest('auth');
       window.location.href = data.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to connect Gmail.');
@@ -77,17 +100,11 @@ export function GmailInboxPage() {
     setError('');
     setMessage('');
     try {
-      const token = await getIdToken(auth.currentUser!, true);
-      const response = await fetch('/api/admin/gmail?mode=sync', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to sync Gmail.');
-      const snapshot = await getDocs(query(collection(db, 'gmailInbox'), orderBy('receivedAt', 'desc'), limit(200)));
-      setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailItem)));
-      setLastSync(new Date().toLocaleString());
-      setMessage(`Gmail sync complete. ${data.processed || 0} inbox messages processed.`);
+      const data = await apiRequest('sync', 'POST');
+      await Promise.all([reloadInbox(), loadStatus()]);
+      setMessage(
+        `Gmail sync complete. ${data.processed || 0} inbox messages checked and ${data.createdIncoming || 0} new Incoming Dak records created.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sync Gmail.');
     } finally {
@@ -95,12 +112,32 @@ export function GmailInboxPage() {
     }
   };
 
+  const disconnectGmail = async () => {
+    if (!window.confirm('Disconnect Gmail from Office Letter Register? Existing Incoming Dak records will not be deleted.')) return;
 
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await apiRequest('disconnect', 'POST');
+      setStatus({ connected: false });
+      setMessage('Gmail disconnected. Existing records remain محفوظ.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to disconnect Gmail.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return items;
-    return items.filter((item) => [item.subject, item.from, item.to, item.date, item.snippet].join(' ').toLowerCase().includes(q));
+    return items.filter((item) =>
+      [item.subject, item.from, item.to, item.date, item.snippet]
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    );
   }, [items, search]);
 
   if (!isAdmin) {
@@ -110,7 +147,9 @@ export function GmailInboxPage() {
           <div className="bg-white rounded-2xl border shadow-sm p-8 text-center">
             <ShieldAlert className="mx-auto text-red-600" size={42} />
             <h1 className="text-2xl font-bold text-slate-900 mt-4">Administrator permission required</h1>
-            <Link to="/dashboard" className="inline-flex items-center gap-2 mt-6 text-blue-700 font-semibold"><ArrowLeft size={18} /> Back to dashboard</Link>
+            <Link to="/dashboard" className="inline-flex items-center gap-2 mt-6 text-blue-700 font-semibold">
+              <ArrowLeft size={18} /> Back to dashboard
+            </Link>
           </div>
         </div>
       </div>
@@ -122,30 +161,80 @@ export function GmailInboxPage() {
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <Link to="/dashboard" className="text-2xl font-bold text-blue-900">Office Letter Register</Link>
-          <Link to="/dashboard" className="text-blue-700 font-semibold inline-flex items-center gap-2"><ArrowLeft size={18} /> Dashboard</Link>
+          <Link to="/dashboard" className="text-blue-700 font-semibold inline-flex items-center gap-2">
+            <ArrowLeft size={18} /> Dashboard
+          </Link>
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex flex-wrap justify-between items-end gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-blue-700"><Inbox size={18} /> Administrator</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+              <Inbox size={18} /> Administrator
+            </div>
             <h1 className="text-3xl font-bold text-slate-900 mt-1">Gmail Inbox</h1>
-            <p className="text-slate-600 mt-1">Review official incoming emails before registering them as Incoming Dak.</p>
+            <p className="text-slate-600 mt-1">
+              Gmail Inbox messages are synchronized into Incoming Dak automatically.
+            </p>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => void connectGmail()} disabled={busy} className="inline-flex items-center gap-2 border border-blue-200 bg-white hover:bg-blue-50 disabled:opacity-60 text-blue-800 px-4 py-3 rounded-lg font-semibold">
-              <Mail size={18} /> Connect Gmail
+
+          <div className="flex flex-wrap gap-2">
+            {status.connected && (
+              <button
+                onClick={() => void disconnectGmail()}
+                disabled={busy}
+                className="inline-flex items-center gap-2 border border-red-200 bg-white hover:bg-red-50 disabled:opacity-60 text-red-700 px-4 py-3 rounded-lg font-semibold"
+              >
+                <Unplug size={18} /> Disconnect
+              </button>
+            )}
+            <button
+              onClick={() => void connectGmail()}
+              disabled={busy}
+              className="inline-flex items-center gap-2 border border-blue-200 bg-white hover:bg-blue-50 disabled:opacity-60 text-blue-800 px-4 py-3 rounded-lg font-semibold"
+            >
+              <Mail size={18} /> {status.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
             </button>
-            <button onClick={() => void syncGmail()} disabled={busy} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-3 rounded-lg font-semibold">
+            <button
+              onClick={() => void syncGmail()}
+              disabled={busy || !status.connected}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-3 rounded-lg font-semibold"
+            >
               {busy ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
               {busy ? 'Syncing...' : 'Sync Now'}
             </button>
           </div>
         </div>
 
+        <div className="mb-5 rounded-xl border bg-white p-4 shadow-sm">
+          {status.connected ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 font-semibold text-green-700">
+                  <CheckCircle2 size={18} /> Gmail connected
+                </div>
+                <div className="text-sm text-slate-600 mt-1">
+                  {status.email || 'Connected Google account'}
+                  {status.lastSyncAt ? ` • Last sync ${new Date(status.lastSyncAt).toLocaleString()}` : ' • Not synchronized yet'}
+                </div>
+              </div>
+              <div className="text-sm text-slate-500">
+                Vercel automatically runs the inbox sync on the configured schedule.
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-amber-800">
+              <strong>Gmail is not connected.</strong> Connect the official Gmail account to start automatic Incoming Dak synchronization.
+            </div>
+          )}
+        </div>
+
         {(error || message) && (
-          <div className={error ? 'mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700' : 'mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700'}>
+          <div className={error
+            ? 'mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'
+            : 'mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700'}
+          >
             {error || message}
           </div>
         )}
@@ -153,18 +242,25 @@ export function GmailInboxPage() {
         <div className="bg-white rounded-xl border shadow-sm p-4 mb-5 flex flex-wrap items-center gap-4">
           <div className="relative flex-1 min-w-[280px]">
             <Search size={18} className="absolute left-3 top-3 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search sender, subject, date..." className="w-full border rounded-lg pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search sender, subject, date..."
+              className="w-full border rounded-lg pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-          <div className="text-sm text-slate-500">{items.length} synced inbox messages{lastSync ? ` • Last sync ${lastSync}` : ''}</div>
+          <div className="text-sm text-slate-500">{items.length} synced inbox messages</div>
         </div>
 
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-12 text-center text-slate-500"><Loader2 className="animate-spin mx-auto mb-3" />Loading synced mail...</div>
+            <div className="p-12 text-center text-slate-500">
+              <Loader2 className="animate-spin mx-auto mb-3" />Loading Gmail inbox...
+            </div>
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center text-slate-500">
               <Mail className="mx-auto mb-3 text-slate-400" size={36} />
-              No synced inbox messages. Click “Sync Gmail Inbox” to fetch them.
+              {status.connected ? 'No synchronized inbox messages yet. Click “Sync Now”.' : 'Connect Gmail to begin synchronization.'}
             </div>
           ) : (
             <div className="divide-y">
@@ -173,16 +269,43 @@ export function GmailInboxPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h2 className="font-bold text-slate-900">{item.subject}</h2>
-                      {item.registered ? <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold"><CheckCircle2 size={13} /> Registered</span> : <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-1 text-xs font-semibold">Pending Review</span>}
+                      {item.registered ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold">
+                          <CheckCircle2 size={13} /> Incoming Dak created
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-1 text-xs font-semibold">
+                          Pending
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm text-slate-600">{item.from} {item.to ? `→ ${item.to}` : ''}</div>
                     <div className="text-xs text-slate-500 mt-1">{item.date}</div>
                     <p className="text-sm text-slate-500 mt-2 line-clamp-2">{item.snippet}</p>
                   </div>
+
                   <div className="flex items-center gap-2">
-                    <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 border rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ExternalLink size={16} /> Open Gmail</a>
-                    {!item.registered && (
-                      <button onClick={() => navigate(`/incoming?gmailId=${encodeURIComponent(item.id)}`)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm font-semibold">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 border rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <ExternalLink size={16} /> Open Gmail
+                    </a>
+
+                    {item.registeredLetterId ? (
+                      <button
+                        onClick={() => navigate('/incoming')}
+                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
+                      >
+                        View Incoming Dak
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/incoming?gmailId=${encodeURIComponent(item.id)}`)}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
+                      >
                         Register as Incoming Dak
                       </button>
                     )}
@@ -194,7 +317,9 @@ export function GmailInboxPage() {
         </div>
 
         <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <strong>How this works:</strong> Gmail metadata is synced into a review queue. Nothing is automatically registered as official Incoming Dak until an administrator approves it. Email bodies are not copied into Firestore.
+          <strong>Workflow:</strong> Inbox mail is imported as Incoming Dak with a traceable Gmail reference.
+          The email remains in Gmail, while the register stores its metadata and a direct Gmail link.
+          Supporting files can be attached from Google Drive, and outgoing letters remain manually registered.
         </div>
       </main>
     </div>
