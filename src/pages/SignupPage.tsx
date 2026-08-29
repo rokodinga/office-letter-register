@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../firebase/auth-context';
 import { Mail, Lock, AlertCircle, User } from 'lucide-react';
+import { FirebaseError } from 'firebase/app';
 
 export function SignupPage() {
   const [email, setEmail] = useState('');
@@ -39,7 +40,7 @@ export function SignupPage() {
       await signup(email, password);
       navigate('/dashboard');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create account';
+      const errorMessage = err instanceof FirebaseError ? err.message : 'Failed to create account';
       setError(errorMessage);
     } finally {
       setLoading(false);
