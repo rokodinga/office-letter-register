@@ -20,7 +20,7 @@ export function DashboardPage() {
   const handleLogout = async () => { await logout(); navigate('/login'); };
   const total = incomingCount + outgoingCount;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === 'Administrator';
 
   return (
     <div className="min-h-screen bg-slate-100">
