@@ -139,6 +139,8 @@ async function syncMailbox(db, connectionId, refreshToken) {
   const token = await accessToken(refreshToken);
   const profile = await gmailProfile(token);
   const connection = (await db.collection('gmailConnections').doc(connectionId).get()).data();
+  const existingInbox = await db.collection('gmailInbox').limit(1).get();
+  const hasImportedInbox = !existingInbox.empty;
   let processed = 0;
   let createdPending = 0;
 
@@ -149,7 +151,9 @@ async function syncMailbox(db, connectionId, refreshToken) {
   url.searchParams.set('labelIds', 'INBOX');
 
   const lastSyncMillis = connection?.lastSyncAt?.toMillis?.();
-  if (lastSyncMillis) {
+  // If the review queue is empty, perform a bootstrap import even if an earlier
+  // sync attempt recorded a timestamp but imported nothing.
+  if (lastSyncMillis && hasImportedInbox) {
     url.searchParams.set('q', `after:${Math.floor(lastSyncMillis / 1000)}`);
   } else {
     url.searchParams.set('q', 'newer_than:30d');
@@ -290,6 +294,8 @@ export default async function handler(req, res) {
         email: data?.email || null,
         connectedAt: data?.connectedAt?.toDate?.()?.toISOString?.() || null,
         lastSyncAt: data?.lastSyncAt?.toDate?.()?.toISOString?.() || null,
+        lastError: data?.lastError || null,
+        lastErrorAt: data?.lastErrorAt?.toDate?.()?.toISOString?.() || null,
       });
     }
 
