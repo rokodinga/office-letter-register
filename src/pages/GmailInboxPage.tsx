@@ -121,7 +121,7 @@ export function GmailInboxPage() {
     try {
       await apiRequest('disconnect', 'POST');
       setStatus({ connected: false });
-      setMessage('Gmail disconnected. Existing records remain محفوظ.');
+      setMessage('Gmail disconnected. Existing Incoming Dak records remain unchanged.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to disconnect Gmail.');
     } finally {
