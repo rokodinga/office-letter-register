@@ -7,6 +7,7 @@ import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { GmailInboxPage } from './pages/GmailInboxPage';
 import { AdminAuditPage } from './pages/AdminAuditPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LetterRegisterPage } from './pages/LetterRegisterPage';
@@ -24,6 +25,7 @@ function App() {
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
           <Route path="/admin/audit" element={<AdminRoute><AdminAuditPage /></AdminRoute>} />
+          <Route path="/admin/gmail" element={<AdminRoute><GmailInboxPage /></AdminRoute>} />
           <Route path="/incoming" element={<ProtectedRoute><LetterRegisterPage type="incoming" /></ProtectedRoute>} />
           <Route path="/outgoing" element={<ProtectedRoute><LetterRegisterPage type="outgoing" /></ProtectedRoute>} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
