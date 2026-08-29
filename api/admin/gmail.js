@@ -264,9 +264,10 @@ export default async function handler(req, res) {
       const db = getAdminDb();
       const connectionRef = db.collection('gmailConnections').doc(uid);
 
+      const existingConnection = (await connectionRef.get()).data();
       await connectionRef.set({
         provider: 'gmail',
-        refreshToken: tokens.refresh_token,
+        ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : { refreshToken: existingConnection?.refreshToken || null }),
         connectedAt: FieldValue.serverTimestamp(),
         active: true,
       }, { merge: true });
