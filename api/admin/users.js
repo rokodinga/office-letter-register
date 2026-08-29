@@ -87,7 +87,14 @@ export default async function handler(req, res) {
       await targetRef.set(updates, { merge: true });
 
       if (status !== undefined) await adminAuth.updateUser(uid, { disabled: status === 'disabled' });
-      await audit(adminDb, actor.uid, 'UPDATE_USER', uid, { role, status });
+
+      // Firestore rejects undefined field values. Only include fields that
+      // were actually supplied by the administrator in the audit record.
+      const auditDetails = {};
+      if (role !== undefined) auditDetails.role = role;
+      if (status !== undefined) auditDetails.status = status;
+      await audit(adminDb, actor.uid, 'UPDATE_USER', uid, auditDetails);
+
       return res.status(200).json({ ok: true });
     }
 
