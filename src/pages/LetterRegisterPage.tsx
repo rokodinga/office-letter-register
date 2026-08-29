@@ -89,7 +89,12 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         if (!active || !snapshot.exists()) return;
         const mail = snapshot.data() as {
           subject?: string; from?: string; to?: string; date?: string; url?: string; id?: string;
+          registeredLetterId?: string;
         };
+        if (mail.registeredLetterId) {
+          setError('This Gmail message has already been registered as Incoming Dak.');
+          return;
+        }
         setEditingId(null);
         setForm({
           number: '',
@@ -112,7 +117,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
           }],
         });
         setShowForm(true);
-        setMessage('Gmail message loaded. Complete the office fields and register it as Incoming Dak.');
+        setMessage('Gmail message loaded for review. Check the details, add the office information and attachments, then explicitly register it as Incoming Dak.');
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Unable to load the Gmail message.');
       }
@@ -196,6 +201,10 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     setMessage('');
 
     try {
+      const gmailAttachment = type === 'incoming'
+        ? form.attachments.find((item) => item.kind === 'email' && item.direction === 'received')
+        : undefined;
+
       const data = type === 'incoming'
         ? {
             letterNo: form.number,
@@ -206,6 +215,11 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             reference: form.reference,
             remarks: form.remarks,
             attachments: form.attachments,
+            ...(gmailAttachment ? {
+              source: 'gmail',
+              gmailMessageId: gmailAttachment.id,
+              gmailUrl: gmailAttachment.url,
+            } : {}),
             updatedAt: serverTimestamp(),
           }
         : {
@@ -225,7 +239,6 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         setMessage('Letter updated successfully.');
       } else {
         const created = await addDoc(collection(db, collectionName), { ...data, createdAt: serverTimestamp() });
-        const gmailAttachment = type === 'incoming' ? form.attachments.find((item) => item.kind === 'email' && item.direction === 'received') : undefined;
         if (gmailAttachment) {
           await setDoc(doc(db, 'gmailInbox', gmailAttachment.id), {
             registered: true,
@@ -381,8 +394,12 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-6 border-b">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">{editingId ? 'Edit Letter' : 'Register New Letter'}</h2>
-                <p className="text-slate-500 mt-1">{title}</p>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {editingId ? 'Edit Letter' : searchParams.get('gmailId') ? 'Review & Register Incoming Dak' : 'Register New Letter'}
+                </h2>
+                <p className="text-slate-500 mt-1">
+                  {searchParams.get('gmailId') ? 'Verify the imported Gmail message before it enters the official register.' : title}
+                </p>
               </div>
               <button onClick={closeForm} className="p-2 hover:bg-slate-100 rounded-lg"><X /></button>
             </div>
@@ -433,7 +450,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeForm} disabled={saving} className="px-5 py-3 border rounded-lg font-semibold">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-semibold">
-                  {saving ? 'Saving...' : editingId ? 'Update Letter' : 'Save Letter'}
+                  {saving ? 'Registering...' : editingId ? 'Update Letter' : searchParams.get('gmailId') ? 'Approve & Register Incoming Dak' : 'Save Letter'}
                 </button>
               </div>
             </form>
