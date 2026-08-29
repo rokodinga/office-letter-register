@@ -138,36 +138,51 @@ async function gmailProfile(token) {
 async function syncMailbox(db, connectionId, refreshToken) {
   const token = await accessToken(refreshToken);
   const profile = await gmailProfile(token);
-  let pageToken = '';
+  const connection = (await db.collection('gmailConnections').doc(connectionId).get()).data();
   let processed = 0;
   let createdPending = 0;
 
-  do {
-    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
-    url.searchParams.set('maxResults', '100');
-    url.searchParams.set('labelIds', 'INBOX');
-    if (pageToken) url.searchParams.set('pageToken', pageToken);
+  // Keep manual syncs and scheduled syncs fast enough for serverless execution.
+  // The first sync imports recent inbox mail; later syncs are incremental.
+  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+  url.searchParams.set('maxResults', '100');
+  url.searchParams.set('labelIds', 'INBOX');
 
-    const listResponse = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const list = await listResponse.json();
-    if (!listResponse.ok) throw new Error(list.error?.message || 'Gmail list request failed.');
+  const lastSyncMillis = connection?.lastSyncAt?.toMillis?.();
+  if (lastSyncMillis) {
+    url.searchParams.set('q', `after:${Math.floor(lastSyncMillis / 1000)}`);
+  } else {
+    url.searchParams.set('q', 'newer_than:30d');
+  }
 
-    for (const message of list.messages || []) {
+  const listResponse = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const list = await listResponse.json();
+  if (!listResponse.ok) throw new Error(list.error?.message || 'Gmail list request failed.');
+
+  const messages = list.messages || [];
+
+  // Fetch Gmail metadata concurrently in small batches rather than one-by-one.
+  for (let i = 0; i < messages.length; i += 10) {
+    const batch = messages.slice(i, i + 10);
+    const details = await Promise.all(batch.map(async (message) => {
       const detailResponse = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const detail = await detailResponse.json();
-      if (!detailResponse.ok) continue;
+      return detailResponse.ok ? detail : null;
+    }));
+
+    for (const detail of details) {
+      if (!detail) continue;
 
       const headers = detail.payload?.headers || [];
       const subject = header(headers, 'Subject') || '(No subject)';
       const from = header(headers, 'From');
       const to = header(headers, 'To');
       const date = header(headers, 'Date');
-      const receivedDate = receivedDateFromMessage(date, detail.internalDate);
       const gmailUrl = `https://mail.google.com/mail/u/0/#inbox/${detail.id}`;
 
       const gmailRef = db.collection('gmailInbox').doc(detail.id);
@@ -189,9 +204,6 @@ async function syncMailbox(db, connectionId, refreshToken) {
       }, { merge: true });
 
       if (!existing?.registeredLetterId) {
-        // Gmail synchronization only imports the message into the review queue.
-        // It must never create an official Incoming Dak record without an administrator
-        // explicitly reviewing and registering it from the UI.
         await gmailRef.set({
           registered: false,
           reviewStatus: 'pending',
@@ -201,14 +213,14 @@ async function syncMailbox(db, connectionId, refreshToken) {
 
       processed += 1;
     }
-
-    pageToken = list.nextPageToken || '';
-  } while (pageToken);
+  }
 
   await db.collection('gmailConnections').doc(connectionId).set({
     email: profile.emailAddress || null,
     lastSyncAt: FieldValue.serverTimestamp(),
     active: true,
+    lastError: FieldValue.delete(),
+    lastErrorAt: FieldValue.delete(),
   }, { merge: true });
 
   return { processed, createdPending, email: profile.emailAddress || null };
