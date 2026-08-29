@@ -25,6 +25,7 @@ type GmailStatus = {
   email?: string | null;
   connectedAt?: string | null;
   lastSyncAt?: string | null;
+  lastError?: string | null;
 };
 
 async function apiRequest(mode: string, method = 'GET') {
@@ -103,6 +104,9 @@ export function GmailInboxPage() {
     try {
       const data = await apiRequest('sync', 'POST');
       await Promise.all([reloadInbox(), loadStatus()]);
+      if (data.errors?.length) {
+        throw new Error(data.errors.map((item: { error: string }) => item.error).join(' | '));
+      }
       setMessage(
         `Gmail sync complete. ${data.processed || 0} inbox messages checked and ${data.createdPending || 0} messages added to the review queue.`,
       );
@@ -248,6 +252,7 @@ export function GmailInboxPage() {
                 <div className="text-sm text-slate-600 mt-1">
                   {status.email || 'Connected Google account'}
                   {status.lastSyncAt ? ` • Last sync ${new Date(status.lastSyncAt).toLocaleString()}` : ' • Not synchronized yet'}
+                  {status.lastError ? ` • Last error: ${status.lastError}` : ''}
                 </div>
               </div>
               <div className="text-sm text-slate-500">
