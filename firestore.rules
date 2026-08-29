@@ -43,12 +43,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Letter registers are readable by every signed-in user, but only
+    // active administrators may create, edit, or delete official records.
     match /incomingLetters/{letterId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /outgoingLetters/{letterId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
