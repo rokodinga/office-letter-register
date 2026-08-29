@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, doc, getDocs, limit, query, setDoc, orderBy } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, query, orderBy } from 'firebase/firestore';
 import { ArrowLeft, CheckCircle2, Inbox, Loader2, Mail, RefreshCw, Search, ShieldAlert, ExternalLink } from 'lucide-react';
-import { db } from '../firebase/config';
+import { auth, db } from '../firebase/config';
+import { getIdToken } from 'firebase/auth';
 import { useAuth } from '../firebase/auth-context';
 
 declare global {
@@ -23,49 +24,6 @@ type GmailItem = {
   registered?: boolean;
   registeredLetterId?: string;
 };
-
-function loadGsi() {
-  return new Promise<void>((resolve, reject) => {
-    const id = 'google-identity-services';
-    const existing = document.getElementById(id);
-    if (existing) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = id;
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Unable to load Google sign-in services.'));
-    document.head.appendChild(script);
-  });
-}
-
-async function getAccessToken(clientId: string) {
-  await loadGsi();
-  if (!window.google?.accounts?.oauth2) throw new Error('Google authorization services are unavailable.');
-
-  return await new Promise<string>((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/gmail.readonly',
-      callback: (response: any) => {
-        if (response?.error) {
-          reject(new Error(response.error_description || 'Gmail authorization was cancelled.'));
-          return;
-        }
-        resolve(response.access_token);
-      },
-    });
-    client.requestAccessToken({ prompt: '' });
-  });
-}
-
-function header(headers: any[], name: string) {
-  return headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value || '';
-}
 
 function gmailUrl(id: string) {
   return `https://mail.google.com/mail/u/0/#inbox/${id}`;
@@ -103,7 +61,7 @@ export function GmailInboxPage() {
     setBusy(true);
     setError('');
     try {
-      const token = await (await import('firebase/auth')).getIdToken((await import('../firebase/config')).auth.currentUser!, true);
+      const token = await getIdToken(auth.currentUser!, true);
       const response = await fetch('/api/admin/gmail?mode=auth', { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Unable to start Gmail connection.');
@@ -119,7 +77,7 @@ export function GmailInboxPage() {
     setError('');
     setMessage('');
     try {
-      const token = await (await import('firebase/auth')).getIdToken((await import('../firebase/config')).auth.currentUser!, true);
+      const token = await getIdToken(auth.currentUser!, true);
       const response = await fetch('/api/admin/gmail?mode=sync', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -137,74 +95,7 @@ export function GmailInboxPage() {
     }
   };
 
-  /*
-   * Legacy browser-side Gmail OAuth is intentionally no longer used.
-   * OAuth refresh tokens stay on the Vercel server.
-   */
-  const legacySync = async () => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-    if (!clientId) return;
-    const token = await getAccessToken(clientId);
-      const collected: GmailItem[] = [];
-      let pageToken = '';
 
-      do {
-        const params = new URLSearchParams({
-          maxResults: '100',
-          labelIds: 'INBOX',
-          includeSpamTrash: 'false',
-        });
-        if (pageToken) params.set('pageToken', pageToken);
-
-        const listResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!listResponse.ok) throw new Error(`Gmail message list failed (${listResponse.status}).`);
-        const list = await listResponse.json();
-
-        for (const message of list.messages || []) {
-          const detailResponse = await fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (!detailResponse.ok) continue;
-
-          const detail = await detailResponse.json();
-          const headers = detail.payload?.headers || [];
-          const item: GmailItem = {
-            id: detail.id,
-            threadId: detail.threadId,
-            subject: header(headers, 'Subject') || '(No subject)',
-            from: header(headers, 'From'),
-            to: header(headers, 'To'),
-            date: header(headers, 'Date'),
-            snippet: detail.snippet || '',
-            url: gmailUrl(detail.id),
-          };
-          collected.push(item);
-
-          await setDoc(doc(db, 'gmailInbox', detail.id), {
-            ...item,
-            source: 'gmail',
-            receivedAt: detail.internalDate ? Number(detail.internalDate) : Date.now(),
-            syncedAt: new Date().toISOString(),
-            syncedBy: userProfile?.uid || '',
-          }, { merge: true });
-        }
-
-        pageToken = list.nextPageToken || '';
-      } while (pageToken);
-
-      const snapshot = await getDocs(query(collection(db, 'gmailInbox'), orderBy('receivedAt', 'desc'), limit(200)));
-      setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailItem)));
-      setLastSync(new Date().toLocaleString());
-      setMessage(`Gmail sync complete. ${collected.length} inbox messages processed.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sync Gmail.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
