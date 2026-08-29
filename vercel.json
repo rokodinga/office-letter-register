@@ -5,5 +5,11 @@
       "source": "/:path((?!api/).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/admin/gmail?mode=sync",
+      "schedule": "*/15 * * * *"
+    }
   ]
 }
