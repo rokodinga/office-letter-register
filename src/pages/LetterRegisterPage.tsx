@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { ArrowLeft, Edit3, Plus, Search, Trash2, X } from 'lucide-react';
 import { db } from '../firebase/config';
+import { useAuth } from '../firebase/auth-context';
 
 type LetterType = 'incoming' | 'outgoing';
 
@@ -52,6 +53,8 @@ const emptyForm: FormData = {
 };
 
 export function LetterRegisterPage({ type }: { type: LetterType }) {
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
   const collectionName = type === 'incoming' ? 'incomingLetters' : 'outgoingLetters';
   const title = type === 'incoming' ? 'Incoming Letter Register' : 'Outgoing Letter Register';
   const partyLabel = type === 'incoming' ? 'From / Sender' : 'To / Addressee';
@@ -97,6 +100,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   }, [letters, search]);
 
   const openNew = () => {
+    if (!isAdmin) return;
     setEditingId(null);
     setForm({ ...emptyForm, date: new Date().toISOString().slice(0, 10) });
     setError('');
@@ -104,6 +108,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   };
 
   const openEdit = (letter: Letter) => {
+    if (!isAdmin) return;
     setEditingId(letter.id);
     setForm({
       number: letter.letterNo || letter.dispatchNo || '',
@@ -127,6 +132,10 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
 
   const saveLetter = async (event: FormEvent) => {
     event.preventDefault();
+    if (!isAdmin) {
+      setError('Only administrators can register or edit letters.');
+      return;
+    }
     setSaving(true);
     setError('');
 
@@ -170,6 +179,10 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
   };
 
   const removeLetter = async (id: string) => {
+    if (!isAdmin) {
+      setError('Only administrators can delete letters.');
+      return;
+    }
     if (!window.confirm('Delete this letter record? This cannot be undone.')) return;
     try {
       await deleteDoc(doc(db, collectionName, id));
@@ -195,10 +208,18 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
             <p className="text-slate-600 mt-1">{letters.length} record{letters.length === 1 ? '' : 's'} in Firestore</p>
           </div>
-          <button onClick={openNew} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-semibold">
-            <Plus size={19} /> Register {type === 'incoming' ? 'Incoming' : 'Outgoing'} Letter
-          </button>
+          {isAdmin && (
+            <button onClick={openNew} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-semibold">
+              <Plus size={19} /> Register {type === 'incoming' ? 'Incoming' : 'Outgoing'} Letter
+            </button>
+          )}
         </div>
+
+        {!isAdmin && (
+          <div className="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
+            You have read-only access. Only administrators can register, edit or delete letter records.
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
           <div className="relative">
@@ -218,7 +239,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
           {filteredLetters.length === 0 ? (
             <div className="p-12 text-center text-slate-500">
               <p className="text-lg font-semibold">No letters found</p>
-              <p className="mt-1">{letters.length ? 'Try a different search.' : 'Click the button above to register the first letter.'}</p>
+              <p className="mt-1">{letters.length ? 'Try a different search.' : isAdmin ? 'Click the button above to register the first letter.' : 'No letters have been registered yet.'}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -231,7 +252,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                     <th className="text-left px-4 py-3">Subject</th>
                     <th className="text-left px-4 py-3">File No.</th>
                     <th className="text-left px-4 py-3">Reference</th>
-                    <th className="text-left px-4 py-3">Actions</th>
+                    {isAdmin && <th className="text-left px-4 py-3">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -243,12 +264,14 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                       <td className="px-4 py-4 min-w-[220px]">{letter.subject || '—'}</td>
                       <td className="px-4 py-4">{letter.fileNo || '—'}</td>
                       <td className="px-4 py-4">{letter.reference || '—'}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2">
-                          <button onClick={() => openEdit(letter)} title="Edit" className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Edit3 size={17} /></button>
-                          <button onClick={() => removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"><Trash2 size={17} /></button>
-                        </div>
-                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-4">
+                          <div className="flex gap-2">
+                            <button onClick={() => openEdit(letter)} title="Edit" className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Edit3 size={17} /></button>
+                            <button onClick={() => removeLetter(letter.id)} title="Delete" className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100"><Trash2 size={17} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -258,7 +281,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         </div>
       </main>
 
-      {showForm && (
+      {showForm && isAdmin && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-6 border-b">
