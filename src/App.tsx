@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { LetterRegisterPage } from './pages/LetterRegisterPage';
 import './App.css';
 
 function App() {
@@ -21,7 +22,24 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/incoming"
+            element={
+              <ProtectedRoute>
+                <LetterRegisterPage type="incoming" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/outgoing"
+            element={
+              <ProtectedRoute>
+                <LetterRegisterPage type="outgoing" />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthProvider>
     </Router>
