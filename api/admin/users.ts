@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not configured.');
-  const serviceAccount = JSON.parse(raw);
-  return initializeApp({ credential: cert(serviceAccount) });
+  return initializeApp({ credential: cert(JSON.parse(raw)) });
 }
 
 function getBearerToken(req: VercelRequest) {
@@ -18,17 +18,17 @@ function getBearerToken(req: VercelRequest) {
 }
 
 async function requireAdmin(req: VercelRequest) {
-  const app = getAdminApp();
-  const adminAuth = getAuth(app);
-  const adminDb = getFirestore(app);
+  const adminApp = getAdminApp();
+  const adminAuth = getAuth(adminApp);
+  const adminDb = getFirestore(adminApp);
   const decoded = await adminAuth.verifyIdToken(getBearerToken(req));
   const profile = await adminDb.collection('users').doc(decoded.uid).get();
   const data = profile.data();
   if (!data || data.role !== 'admin' || data.status !== 'active') throw new Error('Administrator permission required.');
-  return { app, adminAuth, adminDb, actor: decoded };
+  return { adminAuth, adminDb, actor: decoded };
 }
 
-async function audit(adminDb: FirebaseFirestore.Firestore, actorUid: string, action: string, targetUid: string, details: Record<string, unknown> = {}) {
+async function audit(adminDb: Firestore, actorUid: string, action: string, targetUid: string, details: Record<string, unknown> = {}) {
   await adminDb.collection('auditLogs').add({
     actorUid, targetUid, action, details, createdAt: FieldValue.serverTimestamp(),
   });
@@ -68,13 +68,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!target.exists) return res.status(404).json({ error: 'User profile not found.' });
       const current = target.data() || {};
 
-      if (current.role === 'admin' && role === 'user') {
+      if ((current.role === 'admin' && role === 'user') || (status === 'disabled' && current.role === 'admin')) {
         const admins = await adminDb.collection('users').where('role', '==', 'admin').where('status', '==', 'active').get();
-        if (admins.size <= 1) return res.status(400).json({ error: 'The last active administrator cannot be removed.' });
-      }
-      if (status === 'disabled' && current.role === 'admin') {
-        const admins = await adminDb.collection('users').where('role', '==', 'admin').where('status', '==', 'active').get();
-        if (admins.size <= 1) return res.status(400).json({ error: 'The last active administrator cannot be disabled.' });
+        if (admins.size <= 1) return res.status(400).json({ error: 'The last active administrator cannot be removed or disabled.' });
       }
 
       const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -94,6 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const target = await adminDb.collection('users').doc(uid).get();
       if (!target.exists) return res.status(404).json({ error: 'User profile not found.' });
+
       if (action === 'delete') {
         const data = target.data() || {};
         if (data.role === 'admin') {
