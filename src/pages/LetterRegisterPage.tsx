@@ -9,6 +9,7 @@ import {
   getDoc,
   onSnapshot,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from 'firebase/firestore';
 import { ArrowLeft, Edit3, Paperclip, Plus, Search, Trash2, X } from 'lucide-react';
