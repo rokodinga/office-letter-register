@@ -9,7 +9,7 @@ import {
 import type { User, AuthError } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'Administrator' | 'User';
 export type UserStatus = 'active' | 'disabled';
 
 export interface UserProfile {
@@ -34,7 +34,7 @@ async function loadUserProfile(user: User): Promise<UserProfile> {
   if (snapshot.exists()) return snapshot.data() as UserProfile;
   const profile: UserProfile = {
     uid: user.uid, displayName: user.displayName || '', email: user.email || '',
-    photoURL: user.photoURL || '', role: 'user', status: 'active',
+    photoURL: user.photoURL || '', role: 'User', status: 'active',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   };
   await setDoc(ref, profile, { merge: true });
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await updateProfile(credential.user, { displayName: name });
       const profile: UserProfile = {
         uid: credential.user.uid, displayName: name, email: credential.user.email || email.trim(),
-        photoURL: '', role: 'user', status: 'active',
+        photoURL: '', role: 'User', status: 'active',
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       };
       await setDoc(doc(db, 'users', credential.user.uid), profile);
