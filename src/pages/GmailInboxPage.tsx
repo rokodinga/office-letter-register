@@ -17,6 +17,7 @@ type GmailItem = {
   url: string;
   registered?: boolean;
   registeredLetterId?: string;
+  reviewStatus?: 'pending' | 'registered';
 };
 
 type GmailStatus = {
@@ -103,7 +104,7 @@ export function GmailInboxPage() {
       const data = await apiRequest('sync', 'POST');
       await Promise.all([reloadInbox(), loadStatus()]);
       setMessage(
-        `Gmail sync complete. ${data.processed || 0} inbox messages checked and ${data.createdIncoming || 0} new Incoming Dak records created.`,
+        `Gmail sync complete. ${data.processed || 0} inbox messages checked and ${data.createdPending || 0} messages added to the review queue.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sync Gmail.');
@@ -175,7 +176,7 @@ export function GmailInboxPage() {
             </div>
             <h1 className="text-3xl font-bold text-slate-900 mt-1">Gmail Inbox</h1>
             <p className="text-slate-600 mt-1">
-              Gmail Inbox messages are synchronized into Incoming Dak automatically.
+              Gmail Inbox messages are synchronized automatically into a review queue. Nothing becomes an official Incoming Dak record until you approve and register it.
             </p>
           </div>
 
@@ -220,7 +221,7 @@ export function GmailInboxPage() {
                 </div>
               </div>
               <div className="text-sm text-slate-500">
-                Vercel automatically runs the inbox sync on the configured schedule.
+                Vercel can sync the inbox on the configured schedule. Registration always requires your explicit approval.
               </div>
             </div>
           ) : (
@@ -271,11 +272,11 @@ export function GmailInboxPage() {
                       <h2 className="font-bold text-slate-900">{item.subject}</h2>
                       {item.registered ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold">
-                          <CheckCircle2 size={13} /> Incoming Dak created
+                          <CheckCircle2 size={13} /> Registered Incoming Dak
                         </span>
                       ) : (
                         <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-1 text-xs font-semibold">
-                          Pending
+                          Pending Review
                         </span>
                       )}
                     </div>
@@ -306,7 +307,7 @@ export function GmailInboxPage() {
                         onClick={() => navigate(`/incoming?gmailId=${encodeURIComponent(item.id)}`)}
                         className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
                       >
-                        Register as Incoming Dak
+                        Review & Register
                       </button>
                     )}
                   </div>
@@ -317,9 +318,9 @@ export function GmailInboxPage() {
         </div>
 
         <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <strong>Workflow:</strong> Inbox mail is imported as Incoming Dak with a traceable Gmail reference.
-          The email remains in Gmail, while the register stores its metadata and a direct Gmail link.
-          Supporting files can be attached from Google Drive, and outgoing letters remain manually registered.
+          <strong>Workflow:</strong> Gmail sync imports new inbox messages into this review queue only.
+          Open <strong>Review & Register</strong> to check and edit the office fields, attach supporting files from Google Drive,
+          and explicitly register the message as Incoming Dak. The original email remains in Gmail.
         </div>
       </main>
     </div>
