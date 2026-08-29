@@ -171,9 +171,8 @@ export default async function handler(req, res) {
 
     if (mode === 'sync') {
       const cron = req.headers['authorization'];
-      if (process.env.CRON_SECRET && cron !== `Bearer ${process.env.CRON_SECRET}`) {
-        return res.status(401).json({ error: 'Unauthorized cron request.' });
-      }
+      const isCron = Boolean(process.env.CRON_SECRET && cron === `Bearer ${process.env.CRON_SECRET}`);
+      if (!isCron) await verifyAdmin(req);
       const db = getAdminDb();
       const connections = await db.collection('gmailConnections').where('active', '==', true).get();
       let total = 0;
