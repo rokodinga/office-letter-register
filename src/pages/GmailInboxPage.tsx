@@ -99,19 +99,52 @@ export function GmailInboxPage() {
     return () => { active = false; };
   }, [isAdmin]);
 
-  const syncGmail = async () => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-    if (!clientId) {
-      setError('Gmail sync is not configured. Add VITE_GOOGLE_CLIENT_ID in Vercel Environment Variables.');
-      return;
+  const connectGmail = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const token = await (await import('firebase/auth')).getIdToken((await import('../firebase/config')).auth.currentUser!, true);
+      const response = await fetch('/api/admin/gmail?mode=auth', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to start Gmail connection.');
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to connect Gmail.');
+      setBusy(false);
     }
+  };
 
+  const syncGmail = async () => {
     setBusy(true);
     setError('');
     setMessage('');
-
     try {
-      const token = await getAccessToken(clientId);
+      const token = await (await import('firebase/auth')).getIdToken((await import('../firebase/config')).auth.currentUser!, true);
+      const response = await fetch('/api/admin/gmail?mode=sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to sync Gmail.');
+      const snapshot = await getDocs(query(collection(db, 'gmailInbox'), orderBy('receivedAt', 'desc'), limit(200)));
+      setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailItem)));
+      setLastSync(new Date().toLocaleString());
+      setMessage(`Gmail sync complete. ${data.processed || 0} inbox messages processed.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to sync Gmail.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /*
+   * Legacy browser-side Gmail OAuth is intentionally no longer used.
+   * OAuth refresh tokens stay on the Vercel server.
+   */
+  const legacySync = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+    if (!clientId) return;
+    const token = await getAccessToken(clientId);
       const collected: GmailItem[] = [];
       let pageToken = '';
 
@@ -209,10 +242,15 @@ export function GmailInboxPage() {
             <h1 className="text-3xl font-bold text-slate-900 mt-1">Gmail Inbox</h1>
             <p className="text-slate-600 mt-1">Review official incoming emails before registering them as Incoming Dak.</p>
           </div>
-          <button onClick={() => void syncGmail()} disabled={busy} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-3 rounded-lg font-semibold">
-            {busy ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-            {busy ? 'Syncing Gmail...' : 'Sync Gmail Inbox'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => void connectGmail()} disabled={busy} className="inline-flex items-center gap-2 border border-blue-200 bg-white hover:bg-blue-50 disabled:opacity-60 text-blue-800 px-4 py-3 rounded-lg font-semibold">
+              <Mail size={18} /> Connect Gmail
+            </button>
+            <button onClick={() => void syncGmail()} disabled={busy} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-5 py-3 rounded-lg font-semibold">
+              {busy ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+              {busy ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
         </div>
 
         {(error || message) && (
