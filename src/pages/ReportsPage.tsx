@@ -46,7 +46,7 @@ interface ReportRow {
 }
 
 function clean(value?: string) {
-  return (value || '').replace(/\\s+/g, ' ').trim();
+  return (value || '').replace(/\s+/g, ' ').trim();
 }
 
 function reportSource(letter: Letter, type: 'Incoming' | 'Outgoing') {
