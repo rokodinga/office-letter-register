@@ -412,6 +412,19 @@ export default async function handler(req, res) {
       }
       if (deletedGmailInbox) await gmailBatch.commit();
 
+      // Reset the sync cursor so the next manual sync starts a clean,
+      // filtered bootstrap instead of continuing from the old mailbox cursor.
+      const activeConnections = await db.collection('gmailConnections')
+        .where('active', '==', true)
+        .get();
+      for (const connection of activeConnections.docs) {
+        await connection.ref.set({
+          lastSyncAt: FieldValue.delete(),
+          lastError: FieldValue.delete(),
+          lastErrorAt: FieldValue.delete(),
+        }, { merge: true });
+      }
+
       return res.status(200).json({
         ok: true,
         deletedIncoming,
