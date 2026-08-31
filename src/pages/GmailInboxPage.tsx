@@ -74,7 +74,7 @@ export function GmailInboxPage() {
 
   const loadStatus = async () => {
     const data = await apiRequest('status');
-    setStatus(data);
+    setStatus(data as GmailStatus);
   };
 
   useEffect(() => {
