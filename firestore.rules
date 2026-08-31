@@ -43,9 +43,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Letter registers are readable by every signed-in user, but only
-    // active administrators may create, edit, or delete official records.
+    // Gmail review queues are administrator-only.
     match /gmailInbox/{messageId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /gmailSent/{messageId} {
       allow read, write: if isAdmin();
     }
 
