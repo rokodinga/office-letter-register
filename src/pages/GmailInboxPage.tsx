@@ -35,7 +35,19 @@ async function apiRequest(mode: string, method = 'GET') {
     method,
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await response.json();
+  const raw = await response.text();
+  let data: Record<string, any> = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    const contentType = response.headers.get('content-type') || '';
+    const preview = raw.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 240);
+    throw new Error(
+      response.ok
+        ? 'Gmail API returned an invalid response.'
+        : `Gmail API returned a non-JSON response (${response.status}, ${contentType || 'unknown content type'}).${preview ? ` Server response: ${preview}` : ''}`,
+    );
+  }
   if (!response.ok) throw new Error(data.error || 'Gmail request failed.');
   return data;
 }
