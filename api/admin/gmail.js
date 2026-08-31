@@ -20,10 +20,6 @@ function getAdminDb() {
 function oauthConfig() {
   const clientId = process.env.GOOGLE_GMAIL_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_GMAIL_CLIENT_SECRET;
-
-  // Prefer the explicitly configured redirect URI. For Vercel deployments,
-  // fall back to the production URL so a missing redirect variable does not
-  // silently generate a deployment-specific callback URL.
   const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
     || process.env.VERCEL_URL
     || 'office-letter-register.vercel.app';
@@ -135,11 +131,6 @@ function header(headers, name) {
   return headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value || '';
 }
 
-function receivedDateFromMessage(dateHeader, internalDate) {
-  const parsed = dateHeader ? new Date(dateHeader) : new Date(Number(internalDate || Date.now()));
-  return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
-}
-
 function csvEnv(name, fallback = '') {
   return String(process.env[name] || fallback)
     .split(',')
@@ -153,7 +144,6 @@ function parseEmailAddress(value) {
 }
 
 function gmailSyncPolicy() {
-  // Fail closed: if the allowlist is removed, do not import the mailbox.
   const allowedSenders = csvEnv('GMAIL_ALLOWED_SENDERS', 'dfo.nabarangpur@odisha.gov.in');
   const allowedDomains = csvEnv('GMAIL_ALLOWED_DOMAINS', 'odisha.gov.in,gov.in,nic.in');
 
@@ -191,9 +181,6 @@ function buildGmailQuery(lastSyncMillis) {
     ? '{' + senderParts.join(' ') + '}'
     : senderParts[0];
 
-  // Official office correspondence should be in Primary and should exclude
-  // Gmail's social, promotional, updates, forums, reservation and purchase
-  // categories.
   return dateQuery
     + ' category:primary'
     + ' -category:social'
@@ -323,8 +310,6 @@ export default async function handler(req, res) {
   try {
     const mode = String(req.query?.mode || '');
 
-    // Accept both the explicit ?mode=callback form and a callback URL where
-    // Google returned code/error directly to this endpoint.
     if (mode === 'callback' || req.query?.code || req.query?.error) {
       const uid = verifyState(String(req.query?.state || ''));
       const code = String(req.query?.code || '');
@@ -364,8 +349,18 @@ export default async function handler(req, res) {
         }, { merge: true });
       }
 
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(`<!doctype html><html><head><title>Gmail Connected</title></head><body style="font-family:Arial,sans-serif;padding:40px;max-width:680px;margin:auto"><h2>Gmail connected successfully.</h2><p>Your Office Letter Register can now sync the Gmail inbox into Incoming Dak.</p><p>You can close this window and return to the application.</p></body></html>`);
+      // OAuth callbacks currently land on this API endpoint. Redirect the
+      // browser back to the application instead of leaving the user on a
+      // standalone success page.
+      const appUrl = process.env.APP_BASE_URL
+        || 'https://office-letter-register.vercel.app';
+      const target = new URL('/admin/gmail', appUrl);
+      target.searchParams.set('gmail', 'connected');
+      target.searchParams.set('t', String(Date.now()));
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Location', target.toString());
+      return res.status(303).end();
     }
 
     if (mode === 'auth') {
