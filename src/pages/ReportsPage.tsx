@@ -212,10 +212,10 @@ export function ReportsPage() {
       let y = 28;
       const widths = [9, 23, 20, 43, 68, 25, 32, 43, 12];
       const headers = ['#', 'No.', 'Date', 'From / To', 'Subject', 'File No.', 'Reference', 'Source', 'Att.'];
-      const xPositions = widths.reduce<number[]>((acc, width, index) => {
-        acc.push(index === 0 ? margin : acc[index - 1] + widths[index - 1]);
-        return acc;
-      }, []);
+      const xPositions: number[] = [];
+      widths.forEach((_, index) => {
+        xPositions.push(index === 0 ? margin : xPositions[index - 1] + widths[index - 1]);
+      });
 
       const drawColumnHeader = () => {
         pdf.setFont('helvetica', 'bold');
