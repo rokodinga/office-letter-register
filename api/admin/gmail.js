@@ -111,7 +111,11 @@ async function accessToken(refreshToken) {
 
   const data = await response.json();
   if (!response.ok || !data.access_token) {
-    throw new Error(data.error_description || 'Unable to refresh Gmail access token.');
+    const error = new Error(
+      data.error_description || data.error || 'Unable to refresh Gmail access token.',
+    );
+    error.code = data.error || 'token_refresh_failed';
+    throw error;
   }
 
   return data.access_token;
@@ -327,12 +331,26 @@ export default async function handler(req, res) {
       const db = getAdminDb();
       const connectionRef = db.collection('gmailConnections').doc(uid);
 
-      const existingConnection = (await connectionRef.get()).data();
+      // A reconnect must receive a fresh refresh token. Never silently keep
+      // an old credential when Google does not return a refresh token.
+      if (!tokens.refresh_token) {
+        await connectionRef.set({
+          active: false,
+          reauthorizationRequired: true,
+          lastError: 'Google did not issue a new refresh token. Please reconnect and approve Gmail access again.',
+          lastErrorAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        throw new Error('Google did not issue a new refresh token. Please reconnect and approve Gmail access again.');
+      }
+
       await connectionRef.set({
         provider: 'gmail',
-        ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : { refreshToken: existingConnection?.refreshToken || null }),
+        refreshToken: tokens.refresh_token,
         connectedAt: FieldValue.serverTimestamp(),
         active: true,
+        reauthorizationRequired: false,
+        lastError: FieldValue.delete(),
+        lastErrorAt: FieldValue.delete(),
       }, { merge: true });
 
       if (tokens.access_token) {
@@ -355,7 +373,7 @@ export default async function handler(req, res) {
       url.searchParams.set('redirect_uri', redirectUri);
       url.searchParams.set('response_type', 'code');
       url.searchParams.set('access_type', 'offline');
-      url.searchParams.set('prompt', 'consent');
+      url.searchParams.set('prompt', 'consent select_account');
       url.searchParams.set('include_granted_scopes', 'true');
       url.searchParams.set('scope', 'https://www.googleapis.com/auth/gmail.readonly');
       url.searchParams.set('state', signState(uid));
@@ -463,14 +481,25 @@ export default async function handler(req, res) {
           skippedFiltered += result.skippedFiltered || 0;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Gmail sync failed.';
+          const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : '';
           console.error(`Gmail sync failed for ${item.id}:`, error);
+
+          const tokenInvalid = errorCode === 'invalid_grant'
+            || message.toLowerCase().includes('token has been expired or revoked')
+            || message.toLowerCase().includes('invalid_grant');
+
           errors.push({ connectionId: item.id, error: message });
+
           await item.ref.set({
-            lastError: message,
+            lastError: tokenInvalid
+              ? 'Gmail authorization expired or was revoked. Please reconnect Gmail.'
+              : message,
             lastErrorAt: FieldValue.serverTimestamp(),
+            ...(tokenInvalid
+              ? { active: false, reauthorizationRequired: true }
+              : {}),
           }, { merge: true });
         }
-      }
 
       return res.status(200).json({
         ok: errors.length === 0,
