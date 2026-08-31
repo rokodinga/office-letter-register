@@ -15,6 +15,7 @@ import {
 import { getIdToken } from 'firebase/auth';
 import {
   ArrowLeft,
+  Download,
   Edit3,
   Paperclip,
   Plus,
@@ -538,9 +539,14 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       <nav className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <Link to="/dashboard" className="text-2xl font-bold text-blue-900">Office Letter Register</Link>
-          <Link to="/dashboard" className="text-blue-600 hover:text-blue-800 flex items-center gap-2">
-            <ArrowLeft size={18} /> Dashboard
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/reports" className="text-purple-700 hover:text-purple-900 flex items-center gap-2 font-semibold">
+              <Download size={17} /> Reports
+            </Link>
+            <Link to="/dashboard" className="text-blue-600 hover:text-blue-800 flex items-center gap-2">
+              <ArrowLeft size={18} /> Dashboard
+            </Link>
+          </div>
         </div>
       </nav>
 
