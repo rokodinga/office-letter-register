@@ -41,7 +41,7 @@ async function apiRequest(mode: string, method = 'GET') {
     data = raw ? JSON.parse(raw) : {};
   } catch {
     const contentType = response.headers.get('content-type') || '';
-    const preview = raw.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 240);
+    const preview = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
     throw new Error(
       response.ok
         ? 'Gmail API returned an invalid response.'
