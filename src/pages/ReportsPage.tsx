@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Search } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, FileText, Search } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import { db } from '../firebase/config';
