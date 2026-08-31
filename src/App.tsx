@@ -13,6 +13,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LetterRegisterPage } from './pages/LetterRegisterPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
 import './App.css';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
