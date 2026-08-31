@@ -71,11 +71,7 @@ export function PrivacyPage() {
                 https://www.googleapis.com/auth/gmail.readonly
               </div>
               <p>
-                This access is used for the Gmail synchronization feature. Depending on
-                the messages synchronized, the Application may access sender and
-                recipient addresses, subject, date and time, message content, message
-                identifiers, labels or other message metadata, and attachment
-                information associated with correspondence.
+                This access is used for the Gmail synchronization feature. The current synchronization feature requests message metadata such as sender and recipient addresses, subject, date and time, message identifiers, labels used by the synchronization query, and the Gmail-provided message snippet. The current synchronization code does not download or store the full Gmail message body or Gmail attachments.
               </p>
 
               <h3 className="font-semibold text-slate-900 mt-5 mb-2">
@@ -156,9 +152,11 @@ export function PrivacyPage() {
                 report generation.
               </p>
               <p className="mt-3">
-                We seek to limit stored information to information reasonably necessary
-                for these functions.
-              </p>
+                 OAuth refresh credentials required to maintain the administrator's Gmail
+                 connection are stored server-side and are not exposed to the browser
+                 application. We seek to limit stored information to information reasonably
+                 necessary for these functions.
+               </p>
             </section>
 
             <section>
