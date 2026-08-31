@@ -103,6 +103,10 @@ export function SignupPage() {
 
         <div className="mt-6 text-center text-gray-600">
           Already have an account? <Link to="/login" className="text-blue-600 hover:text-blue-700 font-semibold">Sign in</Link>
+          <div className="mt-4 flex justify-center gap-4 text-sm">
+            <Link to="/privacy" className="text-blue-600 hover:text-blue-800">Privacy Policy</Link>
+            <Link to="/terms" className="text-blue-600 hover:text-blue-800">Terms of Service</Link>
+          </div>
         </div>
       </div>
     </div>
