@@ -126,6 +126,72 @@ function receivedDateFromMessage(dateHeader, internalDate) {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
 }
 
+
+function csvEnv(name, fallback = '') {
+  return String(process.env[name] || fallback)
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function parseEmailAddress(value) {
+  const match = String(value || '').match(/<([^>]+)>/);
+  return (match?.[1] || String(value || '').trim()).toLowerCase();
+}
+
+function gmailSyncPolicy() {
+  // Fail closed: if the allowlist is removed, do not import the mailbox.
+  const allowedSenders = csvEnv('GMAIL_ALLOWED_SENDERS', 'dfo.nabarangpur@odisha.gov.in');
+  const allowedDomains = csvEnv('GMAIL_ALLOWED_DOMAINS', 'odisha.gov.in,gov.in,nic.in');
+
+  if (!allowedSenders.length && !allowedDomains.length) {
+    throw new Error('Gmail sync is locked: configure GMAIL_ALLOWED_SENDERS or GMAIL_ALLOWED_DOMAINS.');
+  }
+
+  return { allowedSenders, allowedDomains };
+}
+
+function senderMatchesPolicy(from) {
+  const { allowedSenders, allowedDomains } = gmailSyncPolicy();
+  const email = parseEmailAddress(from);
+  const domain = email.includes('@') ? email.split('@').pop() : '';
+
+  return allowedSenders.some((sender) => email === sender)
+    || allowedDomains.some((allowedDomain) =>
+      domain === allowedDomain || domain.endsWith('.' + allowedDomain)
+    );
+}
+
+function buildGmailQuery(lastSyncMillis) {
+  const { allowedSenders, allowedDomains } = gmailSyncPolicy();
+
+  const dateQuery = lastSyncMillis
+    ? 'after:' + Math.floor(lastSyncMillis / 1000)
+    : 'newer_than:30d';
+
+  const senderParts = [
+    ...allowedSenders.map((sender) => 'from:' + sender),
+    ...allowedDomains.map((domain) => 'from:' + domain),
+  ];
+
+  const senderQuery = senderParts.length > 1
+    ? '{' + senderParts.join(' ') + '}'
+    : senderParts[0];
+
+  // Official office correspondence should be in Primary and should exclude
+  // Gmail's social, promotional, updates, forums, reservation and purchase
+  // categories.
+  return dateQuery
+    + ' category:primary'
+    + ' -category:social'
+    + ' -category:promotions'
+    + ' -category:updates'
+    + ' -category:forums'
+    + ' -category:reservations'
+    + ' -category:purchases'
+    + ' ' + senderQuery;
+}
+
 async function gmailProfile(token) {
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
     headers: { Authorization: `Bearer ${token}` },
@@ -139,84 +205,94 @@ async function syncMailbox(db, connectionId, refreshToken) {
   const token = await accessToken(refreshToken);
   const profile = await gmailProfile(token);
   const connection = (await db.collection('gmailConnections').doc(connectionId).get()).data();
-  const existingInbox = await db.collection('gmailInbox').limit(1).get();
-  const hasImportedInbox = !existingInbox.empty;
   let processed = 0;
   let createdPending = 0;
-
-  // Keep manual syncs and scheduled syncs fast enough for serverless execution.
-  // The first sync imports recent inbox mail; later syncs are incremental.
-  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
-  url.searchParams.set('maxResults', '100');
-  url.searchParams.set('labelIds', 'INBOX');
+  let skippedFiltered = 0;
 
   const lastSyncMillis = connection?.lastSyncAt?.toMillis?.();
-  // If the review queue is empty, perform a bootstrap import even if an earlier
-  // sync attempt recorded a timestamp but imported nothing.
-  if (lastSyncMillis && hasImportedInbox) {
-    url.searchParams.set('q', `after:${Math.floor(lastSyncMillis / 1000)}`);
-  } else {
-    url.searchParams.set('q', 'newer_than:30d');
-  }
+  const query = buildGmailQuery(lastSyncMillis);
 
-  const listResponse = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const list = await listResponse.json();
-  if (!listResponse.ok) throw new Error(list.error?.message || 'Gmail list request failed.');
+  // Gmail messages.list supports server-side q filtering and up to 500
+  // results per request. We cap this sync at 5 pages so a large mailbox can
+  // never be dumped into Firestore in one operation.
+  let pageToken = '';
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+    url.searchParams.set('maxResults', '100');
+    url.searchParams.set('labelIds', 'INBOX');
+    url.searchParams.set('q', query);
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-  const messages = list.messages || [];
+    const listResponse = await fetch(url, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    const list = await listResponse.json();
+    if (!listResponse.ok) throw new Error(list.error?.message || 'Gmail list request failed.');
 
-  // Fetch Gmail metadata concurrently in small batches rather than one-by-one.
-  for (let i = 0; i < messages.length; i += 10) {
-    const batch = messages.slice(i, i + 10);
-    const details = await Promise.all(batch.map(async (message) => {
-      const detailResponse = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      const detail = await detailResponse.json();
-      return detailResponse.ok ? detail : null;
-    }));
+    const messages = list.messages || [];
 
-    for (const detail of details) {
-      if (!detail) continue;
+    // Fetch metadata in small batches. The sender policy is checked again
+    // here so an overly broad Gmail search can never bypass the allowlist.
+    for (let i = 0; i < messages.length; i += 10) {
+      const batch = messages.slice(i, i + 10);
+      const details = await Promise.all(batch.map(async (message) => {
+        const detailResponse = await fetch(
+          'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + message.id
+            + '?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date',
+          { headers: { Authorization: 'Bearer ' + token } },
+        );
+        const detail = await detailResponse.json();
+        return detailResponse.ok ? detail : null;
+      }));
 
-      const headers = detail.payload?.headers || [];
-      const subject = header(headers, 'Subject') || '(No subject)';
-      const from = header(headers, 'From');
-      const to = header(headers, 'To');
-      const date = header(headers, 'Date');
-      const gmailUrl = `https://mail.google.com/mail/u/0/#inbox/${detail.id}`;
+      for (const detail of details) {
+        if (!detail) continue;
 
-      const gmailRef = db.collection('gmailInbox').doc(detail.id);
-      const existing = (await gmailRef.get()).data();
+        const headers = detail.payload?.headers || [];
+        const subject = header(headers, 'Subject') || '(No subject)';
+        const from = header(headers, 'From');
 
-      await gmailRef.set({
-        id: detail.id,
-        threadId: detail.threadId || null,
-        subject,
-        from,
-        to,
-        date,
-        snippet: detail.snippet || '',
-        url: gmailUrl,
-        source: 'gmail',
-        receivedAt: detail.internalDate ? Number(detail.internalDate) : Date.now(),
-        syncedAt: FieldValue.serverTimestamp(),
-        gmailAccount: profile.emailAddress || null,
-      }, { merge: true });
+        if (!senderMatchesPolicy(from)) {
+          skippedFiltered += 1;
+          continue;
+        }
 
-      if (!existing?.registeredLetterId) {
+        const to = header(headers, 'To');
+        const date = header(headers, 'Date');
+        const gmailUrl = 'https://mail.google.com/mail/u/0/#inbox/' + detail.id;
+
+        const gmailRef = db.collection('gmailInbox').doc(detail.id);
+        const existing = (await gmailRef.get()).data();
+
         await gmailRef.set({
-          registered: false,
-          reviewStatus: 'pending',
+          id: detail.id,
+          threadId: detail.threadId || null,
+          subject,
+          from,
+          to,
+          date,
+          snippet: detail.snippet || '',
+          url: gmailUrl,
+          source: 'gmail',
+          receivedAt: detail.internalDate ? Number(detail.internalDate) : Date.now(),
+          syncedAt: FieldValue.serverTimestamp(),
+          gmailAccount: profile.emailAddress || null,
         }, { merge: true });
-        createdPending += 1;
-      }
 
-      processed += 1;
+        if (!existing?.registeredLetterId) {
+          await gmailRef.set({
+            registered: false,
+            reviewStatus: 'pending',
+          }, { merge: true });
+          createdPending += 1;
+        }
+
+        processed += 1;
+      }
     }
+
+    pageToken = list.nextPageToken || '';
+    if (!pageToken || messages.length === 0) break;
   }
 
   await db.collection('gmailConnections').doc(connectionId).set({
@@ -227,7 +303,12 @@ async function syncMailbox(db, connectionId, refreshToken) {
     lastErrorAt: FieldValue.delete(),
   }, { merge: true });
 
-  return { processed, createdPending, email: profile.emailAddress || null };
+  return {
+    processed,
+    createdPending,
+    skippedFiltered,
+    email: profile.emailAddress || null,
+  };
 }
 
 export default async function handler(req, res) {
@@ -322,7 +403,9 @@ export default async function handler(req, res) {
 
       for (const item of gmailInbox.docs) {
         const data = item.data();
-        if (data?.registeredBy === 'gmail-sync') {
+        // Remove only unregistered review-queue entries. Explicitly registered
+        // Incoming Dak records are preserved.
+        if (!data?.registeredLetterId && data?.registered !== true) {
           gmailBatch.delete(item.ref);
           deletedGmailInbox += 1;
         }
@@ -353,6 +436,7 @@ export default async function handler(req, res) {
       const connections = await db.collection('gmailConnections').where('active', '==', true).get();
       let processed = 0;
       let createdPending = 0;
+      let skippedFiltered = 0;
       const errors = [];
 
       for (const item of connections.docs) {
@@ -363,6 +447,7 @@ export default async function handler(req, res) {
           const result = await syncMailbox(db, item.id, data.refreshToken);
           processed += result.processed;
           createdPending += result.createdPending;
+          skippedFiltered += result.skippedFiltered || 0;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Gmail sync failed.';
           console.error(`Gmail sync failed for ${item.id}:`, error);
@@ -374,7 +459,13 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ ok: errors.length === 0, processed, createdPending, errors });
+      return res.status(200).json({
+        ok: errors.length === 0,
+        processed,
+        createdPending,
+        skippedFiltered,
+        errors,
+      });
     }
 
     return res.status(400).json({ error: 'Unknown Gmail operation.' });
