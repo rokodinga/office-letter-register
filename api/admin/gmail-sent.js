@@ -252,6 +252,7 @@ export default async function handler(req, res) {
               : {}),
           }, { merge: true });
         }
+      }
 
       return res.status(200).json({
         ok: errors.length === 0,
