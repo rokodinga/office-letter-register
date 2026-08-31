@@ -11,6 +11,7 @@ import { GmailInboxPage } from './pages/GmailInboxPage';
 import { AdminAuditPage } from './pages/AdminAuditPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LetterRegisterPage } from './pages/LetterRegisterPage';
+import { ReportsPage } from './pages/ReportsPage';
 import './App.css';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/admin/gmail" element={<AdminRoute><GmailInboxPage /></AdminRoute>} />
           <Route path="/incoming" element={<ProtectedRoute><LetterRegisterPage type="incoming" /></ProtectedRoute>} />
           <Route path="/outgoing" element={<ProtectedRoute><LetterRegisterPage type="outgoing" /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
