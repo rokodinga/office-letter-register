@@ -140,7 +140,6 @@ function receivedDateFromMessage(dateHeader, internalDate) {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
 }
 
-
 function csvEnv(name, fallback = '') {
   return String(process.env[name] || fallback)
     .split(',')
@@ -226,9 +225,6 @@ async function syncMailbox(db, connectionId, refreshToken) {
   const lastSyncMillis = connection?.lastSyncAt?.toMillis?.();
   const query = buildGmailQuery(lastSyncMillis);
 
-  // Gmail messages.list supports server-side q filtering and up to 500
-  // results per request. We cap this sync at 5 pages so a large mailbox can
-  // never be dumped into Firestore in one operation.
   let pageToken = '';
   for (let page = 0; page < 5; page += 1) {
     const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
@@ -245,8 +241,6 @@ async function syncMailbox(db, connectionId, refreshToken) {
 
     const messages = list.messages || [];
 
-    // Fetch metadata in small batches. The sender policy is checked again
-    // here so an overly broad Gmail search can never bypass the allowlist.
     for (let i = 0; i < messages.length; i += 10) {
       const batch = messages.slice(i, i + 10);
       const details = await Promise.all(batch.map(async (message) => {
@@ -329,7 +323,9 @@ export default async function handler(req, res) {
   try {
     const mode = String(req.query?.mode || '');
 
-    // Accept both the explicit ?mode=callback form and a callback URL where\n    // Google returned code/error directly to this endpoint.\n    if (mode === 'callback' || req.query?.code || req.query?.error) {
+    // Accept both the explicit ?mode=callback form and a callback URL where
+    // Google returned code/error directly to this endpoint.
+    if (mode === 'callback' || req.query?.code || req.query?.error) {
       const uid = verifyState(String(req.query?.state || ''));
       const code = String(req.query?.code || '');
       const oauthError = String(req.query?.error || '');
@@ -341,8 +337,6 @@ export default async function handler(req, res) {
       const db = getAdminDb();
       const connectionRef = db.collection('gmailConnections').doc(uid);
 
-      // A reconnect must receive a fresh refresh token. Never silently keep
-      // an old credential when Google does not return a refresh token.
       if (!tokens.refresh_token) {
         await connectionRef.set({
           active: false,
@@ -431,8 +425,6 @@ export default async function handler(req, res) {
 
       for (const item of gmailInbox.docs) {
         const data = item.data();
-        // Remove only unregistered review-queue entries. Explicitly registered
-        // Incoming Dak records are preserved.
         if (!data?.registeredLetterId && data?.registered !== true) {
           gmailBatch.delete(item.ref);
           deletedGmailInbox += 1;
@@ -440,8 +432,6 @@ export default async function handler(req, res) {
       }
       if (deletedGmailInbox) await gmailBatch.commit();
 
-      // Reset the sync cursor so the next manual sync starts a clean,
-      // filtered bootstrap instead of continuing from the old mailbox cursor.
       const activeConnections = await db.collection('gmailConnections')
         .where('active', '==', true)
         .get();
