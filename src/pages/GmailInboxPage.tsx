@@ -108,7 +108,7 @@ export function GmailInboxPage() {
         throw new Error(data.errors.map((item: { error: string }) => item.error).join(' | '));
       }
       setMessage(
-        `Gmail sync complete. ${data.processed || 0} inbox messages checked and ${data.createdPending || 0} messages added to the review queue.`,
+        `Gmail sync complete. ${data.processed || 0} official messages imported, ${data.skippedFiltered || 0} non-matching messages filtered out, and ${data.createdPending || 0} new messages added to the review queue.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sync Gmail.');
@@ -118,7 +118,7 @@ export function GmailInboxPage() {
   };
 
   const cleanupLegacyGmail = async () => {
-    if (!window.confirm('Delete all old Gmail-imported Incoming Dak records created by the previous automatic-sync workflow? This will not delete anything from Gmail.')) return;
+    if (!window.confirm('Clear all unregistered Gmail review-queue entries created so far? This will not delete anything from Gmail and will not delete Incoming Dak records that you already registered.')) return;
 
     setBusy(true);
     setError('');
@@ -127,14 +127,12 @@ export function GmailInboxPage() {
       const data = await apiRequest('cleanup-legacy', 'POST');
       await reloadInbox();
       setMessage(
-        'Legacy Gmail cleanup complete. Deleted ' +
-        (data.deletedIncoming || 0) +
-        ' old Incoming Dak records and ' +
+        'Gmail review queue cleared. Deleted ' +
         (data.deletedGmailInbox || 0) +
-        ' old Gmail queue records. Gmail messages themselves were not deleted.',
+        ' unregistered Gmail queue entries. Gmail messages themselves were not deleted.',
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to clean up legacy Gmail imports.');
+      setError(err instanceof Error ? err.message : 'Unable to clear the Gmail review queue.');
     } finally {
       setBusy(false);
     }
@@ -203,7 +201,7 @@ export function GmailInboxPage() {
             </div>
             <h1 className="text-3xl font-bold text-slate-900 mt-1">Gmail Inbox</h1>
             <p className="text-slate-600 mt-1">
-              Gmail Inbox messages are synchronized automatically into a review queue. Nothing becomes an official Incoming Dak record until you approve and register it.
+              Only approved official correspondence is synchronized into the review queue. Nothing becomes an official Incoming Dak record until you review and register it.
             </p>
           </div>
 
@@ -213,7 +211,7 @@ export function GmailInboxPage() {
               disabled={busy}
               className="inline-flex items-center gap-2 border border-amber-200 bg-white hover:bg-amber-50 disabled:opacity-60 text-amber-800 px-4 py-3 rounded-lg font-semibold"
             >
-              Clear Old Gmail Imports
+              Clear Pending Gmail Queue
             </button>
             {status.connected && (
               <button
@@ -256,7 +254,7 @@ export function GmailInboxPage() {
                 </div>
               </div>
               <div className="text-sm text-slate-500">
-                Vercel can sync the inbox on the configured schedule. Registration always requires your explicit approval.
+                Sync is restricted to the configured official sender/domain allowlist and Primary inbox. Registration always requires your explicit approval.
               </div>
             </div>
           ) : (
@@ -353,7 +351,7 @@ export function GmailInboxPage() {
         </div>
 
         <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <strong>Workflow:</strong> Gmail sync imports new inbox messages into this review queue only.
+          <strong>Workflow:</strong> Gmail sync first filters Gmail by the configured official sender/domain allowlist and Primary inbox, then imports matching messages into this review queue only.
           Open <strong>Review & Register</strong> to check and edit the office fields, attach supporting files from Google Drive,
           and explicitly register the message as Incoming Dak. The original email remains in Gmail.
         </div>
