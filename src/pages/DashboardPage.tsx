@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { ArrowDownToLine, ArrowUpFromLine, FileText, LogOut, Mail, Plus, Search, Shield, UserCircle } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, FileText, LogOut, Mail, Plus, Search, Shield, UserCircle, Download } from 'lucide-react';
 import { db } from '../firebase/config';
 import { useAuth } from '../firebase/auth-context';
 
@@ -76,6 +76,7 @@ export function DashboardPage() {
           <div className="grid md:grid-cols-3 gap-4">
             <Link to="/incoming" className="border rounded-lg p-4 hover:bg-slate-50 flex items-center gap-3 text-slate-800"><Search className="text-blue-600" /> View / search incoming letters</Link>
             <Link to="/outgoing" className="border rounded-lg p-4 hover:bg-slate-50 flex items-center gap-3 text-slate-800"><Search className="text-emerald-600" /> View / search outgoing letters</Link>
+            <Link to="/reports" className="border border-purple-200 bg-purple-50 rounded-lg p-4 hover:bg-purple-100 flex items-center gap-3 text-purple-900 font-semibold"><Download className="text-purple-700" /> Download letter reports</Link>
             <Link to="/profile" className="border rounded-lg p-4 hover:bg-slate-50 flex items-center gap-3 text-slate-800"><UserCircle className="text-purple-600" /> Manage my profile</Link>
             {isAdmin && <Link to="/admin/users" className="border border-blue-200 bg-blue-50 rounded-lg p-4 hover:bg-blue-100 flex items-center gap-3 text-blue-900 font-semibold"><Shield className="text-blue-700" /> User management</Link>}
             {isAdmin && <Link to="/admin/gmail" className="border border-red-200 bg-red-50 rounded-lg p-4 hover:bg-red-100 flex items-center gap-3 text-red-900 font-semibold"><Mail className="text-red-700" /> Gmail inbox / Incoming Dak</Link>}
