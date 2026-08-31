@@ -7,7 +7,6 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -17,7 +16,6 @@ import { getIdToken } from 'firebase/auth';
 import {
   ArrowLeft,
   Edit3,
-  Mail,
   Paperclip,
   Plus,
   Search,
