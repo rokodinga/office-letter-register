@@ -20,10 +20,20 @@ function getAdminDb() {
 function oauthConfig() {
   const clientId = process.env.GOOGLE_GMAIL_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_GMAIL_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_GMAIL_REDIRECT_URI;
-  if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error('Google Gmail OAuth is not configured.');
+
+  // Prefer the explicitly configured redirect URI. For Vercel deployments,
+  // fall back to the production URL so a missing redirect variable does not
+  // silently generate a deployment-specific callback URL.
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    || process.env.VERCEL_URL
+    || 'office-letter-register.vercel.app';
+  const defaultRedirectUri = 'https://' + productionHost + '/api/admin/gmail?mode=callback';
+  const redirectUri = process.env.GOOGLE_GMAIL_REDIRECT_URI || defaultRedirectUri;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Google Gmail OAuth is not configured. Add GOOGLE_GMAIL_CLIENT_ID and GOOGLE_GMAIL_CLIENT_SECRET in Vercel Environment Variables.');
   }
+
   return { clientId, clientSecret, redirectUri };
 }
 
@@ -319,7 +329,7 @@ export default async function handler(req, res) {
   try {
     const mode = String(req.query?.mode || '');
 
-    if (mode === 'callback') {
+    // Accept both the explicit ?mode=callback form and a callback URL where\n    // Google returned code/error directly to this endpoint.\n    if (mode === 'callback' || req.query?.code || req.query?.error) {
       const uid = verifyState(String(req.query?.state || ''));
       const code = String(req.query?.code || '');
       const oauthError = String(req.query?.error || '');
