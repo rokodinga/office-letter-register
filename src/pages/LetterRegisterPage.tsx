@@ -262,21 +262,22 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     });
   }, [letters, search]);
 
-  const filteredSources = useMemo(() => {
+  const filteredIncomingSources = useMemo(() => {
     const q = sourceSearch.trim().toLowerCase();
-    if (form.sourceType === 'incoming') {
-      return incomingLetters
-        .filter((letter) => {
-          if (!q) return true;
-          return [
-            letter.letterNo, letter.receivedDate, letter.from, letter.subject,
-            letter.fileNo, letter.reference, letter.remarks,
-          ].filter(Boolean).join(' ').toLowerCase().includes(q);
-        })
-        .sort((a, b) => (b.receivedDate || '').localeCompare(a.receivedDate || ''))
-        .slice(0, 20);
-    }
+    return incomingLetters
+      .filter((letter) => {
+        if (!q) return true;
+        return [
+          letter.letterNo, letter.receivedDate, letter.from, letter.subject,
+          letter.fileNo, letter.reference, letter.remarks,
+        ].filter(Boolean).join(' ').toLowerCase().includes(q);
+      })
+      .sort((a, b) => (b.receivedDate || '').localeCompare(a.receivedDate || ''))
+      .slice(0, 20);
+  }, [sourceSearch, incomingLetters]);
 
+  const filteredSentSources = useMemo(() => {
+    const q = sourceSearch.trim().toLowerCase();
     return sentItems
       .filter((item) => !item.registeredLetterId)
       .filter((item) => {
@@ -286,7 +287,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       })
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 20);
-  }, [form.sourceType, sourceSearch, incomingLetters, sentItems]);
+  }, [sourceSearch, sentItems]);
 
   const openNew = () => {
     if (!isAdmin) return;
@@ -740,7 +741,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
 
                       <div className="mt-3 max-h-64 overflow-y-auto space-y-2">
                         {form.sourceType === 'incoming' ? (
-                          filteredSources.length ? filteredSources.map((letter) => (
+                          filteredIncomingSources.length ? filteredIncomingSources.map((letter) => (
                             <button
                               key={letter.id}
                               type="button"
@@ -762,7 +763,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
                           )
                         ) : (
                           <>
-                            {filteredSources.length ? filteredSources.map((item) => (
+                            {filteredSentSources.length ? filteredSentSources.map((item) => (
                               <button
                                 key={item.id}
                                 type="button"
