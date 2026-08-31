@@ -26,6 +26,7 @@ type GmailStatus = {
   connectedAt?: string | null;
   lastSyncAt?: string | null;
   lastError?: string | null;
+  reauthorizationRequired?: boolean;
 };
 
 async function apiRequest(mode: string, method = 'GET') {
@@ -258,8 +259,26 @@ export function GmailInboxPage() {
               </div>
             </div>
           ) : (
-            <div className="text-sm text-amber-800">
-              <strong>Gmail is not connected.</strong> Connect the official Gmail account to start automatic Incoming Dak synchronization.
+            <div className="text-sm">
+              {status.lastError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+                  <strong>Gmail authorization needs attention.</strong>{' '}
+                  {status.lastError}
+                  <div className="mt-2">
+                    <button
+                      onClick={() => void connectGmail()}
+                      disabled={busy}
+                      className="font-semibold text-blue-700 hover:text-blue-900 underline"
+                    >
+                      Reconnect Gmail
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-amber-800">
+                  <strong>Gmail is not connected.</strong> Connect the official Gmail account to start automatic Incoming Dak synchronization.
+                </div>
+              )}
             </div>
           )}
         </div>
