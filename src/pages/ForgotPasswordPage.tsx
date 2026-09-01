@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { FirebaseError } from 'firebase/app';
 import { AlertCircle, CheckCircle2, Lock, Mail } from 'lucide-react';
+import { OfficeHeader } from '../components/OfficeHeader';
 import { useAuth } from '../firebase/auth-context';
 
 export function ForgotPasswordPage() {
@@ -32,13 +33,18 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-800 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8">
-        <div className="text-center mb-8">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(37,99,235,0.35),transparent_35%),radial-gradient(circle_at_85%_85%,rgba(16,185,129,0.2),transparent_30%)]" />
+      <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col justify-center">
+        <OfficeHeader className="mb-5 sm:mb-6" />
+        <div className="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl shadow-black/25">
+          <div className="h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-500" />
+          <div className="p-6 sm:p-8">
+        <div className="text-center mb-7">
           <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
             <Lock className="text-blue-700" size={28} />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mt-4">Forgot Password?</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 mt-4">Forgot Password?</h1>
           <p className="text-gray-600 mt-2">Enter your registered email and we'll send you a reset link.</p>
         </div>
 
@@ -63,6 +69,9 @@ export function ForgotPasswordPage() {
         <div className="mt-6 text-center text-gray-600">
           Remember your password? <Link to="/login" className="text-blue-600 font-semibold">Sign in</Link>
         </div>
+          </div>
+        </div>
+        <p className="mt-5 text-center text-xs font-medium text-slate-400">Password recovery is handled securely through Firebase Authentication.</p>
       </div>
     </div>
   );
