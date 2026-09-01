@@ -107,13 +107,27 @@ function addRePrefix(subject: string) {
   return /^(re|fw|fwd):/i.test(value) ? value : 'Re: ' + value;
 }
 
+async function loadSentGmail() {
+  const token = await getIdToken(auth.currentUser!, true);
+  const response = await fetch('/api/admin/gmail-sent?mode=list', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  const raw = await response.text();
+  let data: Record<string, any> = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Gmail Sent API returned an invalid response.'); }
+  if (!response.ok) throw new Error(data.error || 'Unable to load Gmail sent mail.');
+  return Array.isArray(data.items) ? data.items as GmailSentItem[] : [];
+}
+
 async function syncSentGmail() {
   const token = await getIdToken(auth.currentUser!, true);
   const response = await fetch('/api/admin/gmail-sent?mode=sync', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token },
   });
-  const data = await response.json();
+  const raw = await response.text();
+  let data: Record<string, any> = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Gmail Sent API returned an invalid response.'); }
   if (!response.ok) throw new Error(data.error || 'Unable to sync Gmail sent mail.');
   if (data.errors?.length) {
     throw new Error(data.errors.map((item: { error: string }) => item.error).join(' | '));
@@ -231,17 +245,19 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       (err) => setError(err.message),
     );
 
-    const unsubscribeSent = onSnapshot(
-      collection(db, 'gmailSent'),
-      (snapshot) => {
-        setSentItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as GmailSentItem)));
-      },
-      (err) => setError(err.message),
-    );
+    let active = true;
+
+    void loadSentGmail()
+      .then((items) => {
+        if (active) setSentItems(items);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Unable to load Gmail sent mail.');
+      });
 
     return () => {
+      active = false;
       unsubscribeIncoming();
-      unsubscribeSent();
     };
   }, [isAdmin, type]);
 
@@ -501,6 +517,8 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     setMessage('');
     try {
       const data = await syncSentGmail();
+      const items = await loadSentGmail();
+      setSentItems(items);
       setMessage(
         'Gmail Sent sync complete. ' +
         (data.processed || 0) +
