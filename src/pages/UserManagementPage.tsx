@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, KeyRound, Shield, UserCheck, UserX, Trash2, LogOut, X, Plus, UserPlus } from 'lucide-react';
 import { auth } from '../firebase/config';
@@ -128,7 +129,7 @@ export function UserManagementPage() {
     } finally { setBusyUid(''); }
   };
 
-  const handleCreateUser = async (event: React.FormEvent) => {
+  const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault();
     setMessage('');
     setError('');
@@ -275,7 +276,7 @@ export function UserManagementPage() {
       </main>
 
       {creatingUser && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingUser) setCreatingUser(false); }}>
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreatingUser(false); }}>
           <section className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <div className="flex items-center gap-3">
