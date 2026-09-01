@@ -218,12 +218,19 @@ async function syncSentMailbox(db, connectionId, refreshToken) {
           syncedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
 
-        if (!existing?.registeredLetterId) {
+        if (!existing) {
           await gmailRef.set({
             registered: false,
             reviewStatus: 'pending',
           }, { merge: true });
           createdPending += 1;
+        } else if (!existing.registeredLetterId) {
+          // Keep an existing pending queue entry pending, but do not count it
+          // as a newly created item on every subsequent sync.
+          await gmailRef.set({
+            registered: false,
+            reviewStatus: existing.reviewStatus || 'pending',
+          }, { merge: true });
         } else {
           alreadyRegistered += 1;
         }
