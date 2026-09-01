@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../firebase/auth-context';
-import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { Mail, Lock, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { OfficeHeader } from '../components/OfficeHeader';
 import { FirebaseError } from 'firebase/app';
 
 export function LoginPage() {
@@ -28,29 +29,21 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-800 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-4xl mb-6 px-2">
-          <div className="flex items-center justify-center gap-4 text-center">
-            <img
-              src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png"
-              alt="Government of Odisha emblem"
-              className="h-16 w-16 object-contain shrink-0"
-            />
-            <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-white">
-                Forest, Environment &amp; Climate Change Department Govt of Odisha
-              </h1>
-              <p className="mt-1 text-sm sm:text-base md:text-lg font-semibold text-blue-100">
-                Forest Range Office, Kodinga
-              </p>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(37,99,235,0.35),transparent_35%),radial-gradient(circle_at_85%_85%,rgba(16,185,129,0.2),transparent_30%)]" />
+      <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col justify-center">
+        <OfficeHeader className="mb-5 sm:mb-6" />
+
+        <div className="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl shadow-black/25">
+          <div className="h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-500" />
+          <div className="p-6 sm:p-8">
+            <div className="mb-7 text-center">
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <ShieldCheck size={23} />
+              </div>
+              <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">Office Letter Register</h2>
+              <p className="mt-1.5 text-sm text-slate-500">Secure sign in to your office portal</p>
             </div>
-          </div>
-        </div>
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Office Letter Register</h1>
-          <p className="text-gray-600 mt-2">Sign in to your account</p>
-        </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
@@ -81,8 +74,8 @@ export function LoginPage() {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 px-4 rounded-lg">
-            {loading ? 'Signing in...' : 'Sign In'}
+          <button type="submit" disabled={loading} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-xl disabled:bg-blue-400">
+            {loading ? 'Signing in...' : <>Sign In <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" /></>}
           </button>
         </form>
 
@@ -93,6 +86,9 @@ export function LoginPage() {
             <Link to="/terms" className="text-blue-600 hover:text-blue-800">Terms of Service</Link>
           </div>
         </div>
+          </div>
+        </div>
+        <p className="mt-5 text-center text-xs font-medium text-slate-400">Authorized users only • Office correspondence management</p>
       </div>
     </div>
   );
