@@ -5,6 +5,31 @@ import { ArrowDownToLine, ArrowUpFromLine, FileText, LogOut, Mail, Plus, Search,
 import { db } from '../firebase/config';
 import { useAuth } from '../firebase/auth-context';
 
+function resolveProfilePhotoUrl(value?: string | null): string {
+  const raw = value?.trim() || '';
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+
+    // Firebase stores the original Google Drive sharing URL, while <img>
+    // needs a directly renderable image URL.
+    if (hostname === 'drive.google.com' || hostname === 'www.drive.google.com') {
+      const pathMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
+      const id = pathMatch?.[1] || url.searchParams.get('id');
+
+      if (id) {
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w400`;
+      }
+    }
+
+    return raw;
+  } catch {
+    return '';
+  }
+}
+
 export function DashboardPage() {
   const { user, userProfile, logout } = useAuth();
   const navigate = useNavigate();
@@ -19,8 +44,10 @@ export function DashboardPage() {
 
   const handleLogout = async () => { await logout(); navigate('/login'); };
   const total = incomingCount + outgoingCount;
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
+  const displayName = user?.displayName || userProfile?.displayName || user?.email?.split('@')[0] || 'User';
   const isAdmin = userProfile?.role === 'Administrator';
+  const profilePhoto = resolveProfilePhotoUrl(user?.photoURL || userProfile?.photoURL);
+  const initials = displayName.trim().charAt(0).toUpperCase() || 'U';
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -29,7 +56,25 @@ export function DashboardPage() {
           <Link to="/dashboard" className="text-2xl font-bold text-blue-900">Office Letter Register</Link>
           <div className="flex items-center gap-3">
             <Link to="/profile" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100" title="View profile">
-              {user?.photoURL ? <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full object-cover" /> : <UserCircle className="text-blue-700" size={32} />}
+              {profilePhoto ? (
+                <img
+                  src={profilePhoto}
+                  alt="Profile"
+                  className="w-9 h-9 rounded-full object-cover border-2 border-blue-100"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                    const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <span
+                className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 items-center justify-center text-sm font-bold"
+                style={{ display: profilePhoto ? 'none' : 'flex' }}
+                aria-hidden="true"
+              >
+                {initials}
+              </span>
               <span className="hidden md:block text-left"><span className="block text-sm font-semibold text-slate-900">{displayName}</span><span className="block text-xs text-slate-500">View profile</span></span>
             </Link>
             <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg"><LogOut size={18} /> Sign Out</button>
