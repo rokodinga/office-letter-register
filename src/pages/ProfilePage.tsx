@@ -5,8 +5,30 @@ import { FirebaseError } from 'firebase/app';
 import { CheckCircle2, Lock, Mail, Save, UserCircle } from 'lucide-react';
 import { useAuth } from '../firebase/auth-context';
 
+function resolveProfilePhotoUrl(value?: string | null): string {
+  const raw = value?.trim() || '';
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+
+    if (hostname === 'drive.google.com' || hostname === 'www.drive.google.com') {
+      const pathMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
+      const id = pathMatch?.[1] || url.searchParams.get('id');
+      if (id) {
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w400`;
+      }
+    }
+
+    return raw;
+  } catch {
+    return '';
+  }
+}
+
 export function ProfilePage() {
-  const { user, updateUserProfile, changeEmail, changePassword } = useAuth();
+  const { user, userProfile, updateUserProfile, changeEmail, changePassword } = useAuth();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,10 +43,10 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    setDisplayName(user.displayName || '');
-    setEmail(user.email || '');
-    setPhotoURL(user.photoURL || '');
-  }, [user]);
+    setDisplayName(user.displayName || userProfile?.displayName || '');
+    setEmail(user.email || userProfile?.email || '');
+    setPhotoURL(user.photoURL || userProfile?.photoURL || '');
+  }, [user, userProfile]);
 
   if (!user) {
     navigate('/login');
@@ -98,7 +120,8 @@ export function ProfilePage() {
     }
   };
 
-  const initials = (user.displayName || user.email || 'U').trim().charAt(0).toUpperCase();
+  const initials = (user.displayName || userProfile?.displayName || user.email || 'U').trim().charAt(0).toUpperCase();
+  const profilePhoto = resolveProfilePhotoUrl(user.photoURL || userProfile?.photoURL);
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -121,11 +144,24 @@ export function ProfilePage() {
         <div className="grid lg:grid-cols-3 gap-6">
           <section className="bg-white rounded-xl shadow-sm border p-6 h-fit">
             <div className="flex flex-col items-center text-center">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="Profile" className="w-24 h-24 rounded-full object-cover border-4 border-blue-100" />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-4xl font-bold">{initials}</div>
-              )}
+              {profilePhoto ? (
+                <img
+                  src={profilePhoto}
+                  alt="Profile"
+                  className="w-24 h-24 rounded-full object-cover border-4 border-blue-100"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                    const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                className="w-24 h-24 rounded-full bg-blue-100 text-blue-800 items-center justify-center text-4xl font-bold"
+                style={{ display: profilePhoto ? 'none' : 'flex' }}
+              >
+                {initials}
+              </div>
               <h2 className="text-xl font-bold text-slate-900 mt-4">{user.displayName || 'User'}</h2>
               <p className="text-slate-500 break-all">{user.email}</p>
               <div className="mt-5 w-full text-left space-y-3 text-sm">
