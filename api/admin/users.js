@@ -34,6 +34,9 @@ async function audit(db, actorUid, action, targetUid, details = {}) {
   });
 }
 
+// Vercel serverless functions must return within the platform's configured duration.
+export const config = { maxDuration: 60 };
+
 export default async function handler(req, res) {
   try {
     const { adminAuth, adminDb, actor } = await requireAdmin(req);
@@ -128,7 +131,11 @@ export default async function handler(req, res) {
             emailVerified: false,
           });
 
-          await adminDb.collection('users').doc(createdUser.uid).set({
+          const batch = adminDb.batch();
+          const profileRef = adminDb.collection('users').doc(createdUser.uid);
+          const auditRef = adminDb.collection('auditLogs').doc();
+
+          batch.set(profileRef, {
             uid: createdUser.uid,
             displayName,
             email,
@@ -138,8 +145,14 @@ export default async function handler(req, res) {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
           });
-
-          await audit(adminDb, actor.uid, 'CREATE_USER', createdUser.uid, { role, email });
+          batch.set(auditRef, {
+            actorUid: actor.uid,
+            targetUid: createdUser.uid,
+            action: 'CREATE_USER',
+            details: { role, email },
+            createdAt: FieldValue.serverTimestamp(),
+          });
+          await batch.commit();
         } catch (error) {
           if (createdUser?.uid) {
             try { await adminAuth.deleteUser(createdUser.uid); } catch (cleanupError) {
