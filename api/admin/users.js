@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       const current = target.data() || {};
 
       if ((current.role === 'Administrator' && role === 'User') ||
-          (status === 'disabled' && current.role === 'admin')) {
+          (current.role === 'Administrator' && status === 'disabled')) {
         const admins = await adminDb.collection('users')
           .where('role', '==', 'Administrator').where('status', '==', 'active').get();
         if (admins.size <= 1) {
@@ -88,8 +88,6 @@ export default async function handler(req, res) {
 
       if (status !== undefined) await adminAuth.updateUser(uid, { disabled: status === 'disabled' });
 
-      // Firestore rejects undefined field values. Only include fields that
-      // were actually supplied by the administrator in the audit record.
       const auditDetails = {};
       if (role !== undefined) auditDetails.role = role;
       if (status !== undefined) auditDetails.status = status;
@@ -99,7 +97,73 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { uid, action } = req.body || {};
+      const body = req.body || {};
+
+      if (body.action === 'createUser') {
+        const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+        const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : '';
+        const password = typeof body.password === 'string' ? body.password : '';
+        const photoURL = typeof body.photoURL === 'string' ? body.photoURL.trim() : '';
+        const role = body.role === 'Administrator' ? 'Administrator' : 'User';
+
+        if (!displayName) return res.status(400).json({ error: 'Full name is required.' });
+        if (!email || !email.includes('@')) return res.status(400).json({ error: 'A valid email address is required.' });
+        if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+        try {
+          const existing = await adminAuth.getUserByEmail(email);
+          if (existing) return res.status(409).json({ error: 'That email address is already registered.' });
+        } catch (error) {
+          if (error?.code !== 'auth/user-not-found') throw error;
+        }
+
+        let createdUser;
+        try {
+          createdUser = await adminAuth.createUser({
+            email,
+            password,
+            displayName,
+            photoURL: photoURL || undefined,
+            disabled: false,
+            emailVerified: false,
+          });
+
+          await adminDb.collection('users').doc(createdUser.uid).set({
+            uid: createdUser.uid,
+            displayName,
+            email,
+            photoURL,
+            role,
+            status: 'active',
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+
+          await audit(adminDb, actor.uid, 'CREATE_USER', createdUser.uid, { role, email });
+        } catch (error) {
+          if (createdUser?.uid) {
+            try { await adminAuth.deleteUser(createdUser.uid); } catch (cleanupError) {
+              console.error('Failed to clean up partially created user:', cleanupError);
+            }
+          }
+          throw error;
+        }
+
+        return res.status(201).json({
+          ok: true,
+          user: {
+            uid: createdUser.uid,
+            displayName: createdUser.displayName || displayName,
+            email: createdUser.email || email,
+            photoURL: createdUser.photoURL || photoURL,
+            role,
+            status: 'active',
+            emailVerified: createdUser.emailVerified,
+          },
+        });
+      }
+
+      const { uid, action } = body;
       if (!uid || !['revokeSessions', 'delete'].includes(action)) {
         return res.status(400).json({ error: 'Invalid administrator action.' });
       }
@@ -114,7 +178,7 @@ export default async function handler(req, res) {
         const data = target.data() || {};
         if (data.role === 'Administrator') {
           const admins = await adminDb.collection('users')
-            .where('role', '==', 'admin').where('status', '==', 'active').get();
+            .where('role', '==', 'Administrator').where('status', '==', 'active').get();
           if (admins.size <= 1) {
             return res.status(400).json({ error: 'The last active administrator cannot be deleted.' });
           }
