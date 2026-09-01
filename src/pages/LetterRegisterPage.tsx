@@ -119,6 +119,23 @@ async function loadSentGmail() {
   return Array.isArray(data.items) ? data.items as GmailSentItem[] : [];
 }
 
+async function registerSentGmail(gmailId: string, letterId: string) {
+  const token = await getIdToken(auth.currentUser!, true);
+  const response = await fetch('/api/admin/gmail-sent?mode=register', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ gmailId, letterId }),
+  });
+  const raw = await response.text();
+  let data: Record<string, any> = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Gmail Sent API returned an invalid response.'); }
+  if (!response.ok) throw new Error(data.error || 'Unable to mark Gmail sent message as registered.');
+  return data;
+}
+
 async function syncSentGmail() {
   const token = await getIdToken(auth.currentUser!, true);
   const response = await fetch('/api/admin/gmail-sent?mode=sync', {
@@ -461,13 +478,7 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         }
 
         if (type === 'outgoing' && form.sourceGmailMessageId) {
-          await setDoc(doc(db, 'gmailSent', form.sourceGmailMessageId), {
-            registered: true,
-            registeredLetterId: created.id,
-            registeredAt: serverTimestamp(),
-            registeredBy: userProfile?.uid || '',
-            reviewStatus: 'registered',
-          }, { merge: true });
+          await registerSentGmail(form.sourceGmailMessageId, created.id);
         }
 
         setMessage('Letter registered successfully.');
