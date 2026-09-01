@@ -53,7 +53,21 @@ export function DashboardPage() {
     <div className="min-h-screen bg-slate-100">
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
-          <Link to="/dashboard" className="text-2xl font-bold text-blue-900">Office Letter Register</Link>
+          <Link to="/dashboard" className="flex items-center gap-4 min-w-0" aria-label="Office Letter Register dashboard">
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png"
+              alt="Government of Odisha emblem"
+              className="h-14 w-14 object-contain shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block text-lg md:text-2xl font-bold leading-tight text-blue-900">
+                Forest, Environment &amp; Climate Change Department Govt of Odisha
+              </span>
+              <span className="block mt-1 text-sm md:text-base font-semibold leading-tight text-slate-700">
+                Forest Range Office, Kodinga
+              </span>
+            </span>
+          </Link>
           <div className="flex items-center gap-3">
             <Link to="/profile" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100" title="View profile">
               {profilePhoto ? (
