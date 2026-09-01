@@ -278,6 +278,26 @@ export default async function handler(req, res) {
       });
     }
 
+    if (mode === 'register') {
+      const uid = await verifyAdmin(req);
+      const gmailId = String(req.body?.gmailId || '');
+      const letterId = String(req.body?.letterId || '');
+      if (!gmailId || !letterId) {
+        return res.status(400).json({ error: 'gmailId and letterId are required.' });
+      }
+
+      const db = getAdminDb();
+      await db.collection('gmailSent').doc(gmailId).set({
+        registered: true,
+        registeredLetterId: letterId,
+        registeredAt: FieldValue.serverTimestamp(),
+        registeredBy: uid,
+        reviewStatus: 'registered',
+      }, { merge: true });
+
+      return res.status(200).json({ ok: true });
+    }
+
     if (mode === 'sync') {
       const cronAuth = req.headers.authorization || '';
       const isCron = Boolean(process.env.CRON_SECRET && cronAuth === 'Bearer ' + process.env.CRON_SECRET);
