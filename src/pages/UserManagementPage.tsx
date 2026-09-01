@@ -59,6 +59,7 @@ export function UserManagementPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUid, setBusyUid] = useState('');
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [newUser, setNewUser] = useState<NewUserForm>(emptyNewUser);
@@ -150,6 +151,7 @@ export function UserManagementPage() {
 
       setMessage(`User ${result.user?.displayName || displayName} created successfully.`);
       setNewUser(emptyNewUser);
+      setCreateModalOpen(false);
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create user.');
@@ -189,7 +191,7 @@ export function UserManagementPage() {
             <div className="bg-white border rounded-lg px-4 py-3 text-sm"><span className="text-slate-500">Total users</span><strong className="ml-2 text-slate-900">{users.length}</strong></div>
             <button
               type="button"
-              onClick={() => { setMessage(''); setError(''); setNewUser(emptyNewUser); setCreatingUser(true); }}
+              onClick={() => { setMessage(''); setError(''); setNewUser(emptyNewUser); setCreateModalOpen(true); }}
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-semibold shadow-sm"
             >
               <Plus size={18} /> Create New User
@@ -246,15 +248,15 @@ export function UserManagementPage() {
         <div className="mt-4 flex gap-2 items-start text-sm text-slate-500"><KeyRound size={17} className="mt-0.5 shrink-0" /><p>Password reset remains available through the user's email reset flow. The administrator panel handles profile viewing, account access, role, deletion and session revocation.</p></div>
       </main>
 
-      {creatingUser && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreatingUser(false); }}>
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingUser) setCreateModalOpen(false); }}>
           <section className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center"><UserPlus size={20} /></div>
                 <div><h2 className="text-xl font-bold text-slate-900">Create New User</h2><p className="text-sm text-slate-500">Create a Firebase account and register its profile.</p></div>
               </div>
-              <button type="button" onClick={() => setCreatingUser(false)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" aria-label="Close"><X size={20} /></button>
+              <button type="button" onClick={() => { if (!creatingUser) setCreateModalOpen(false); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-50" aria-label="Close"><X size={20} /></button>
             </div>
 
             <form onSubmit={handleCreateUser} className="p-6 space-y-5">
@@ -297,9 +299,10 @@ export function UserManagementPage() {
               <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
                 The new account is created without signing you out. The user's email remains unverified until the normal email-verification flow is completed.
               </div>
+              {error && <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex gap-2"><AlertCircle size={18} className="shrink-0 mt-0.5" /><span>{error}</span></div>}
 
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setCreatingUser(false)} className="px-5 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold">Cancel</button>
+                <button type="button" onClick={() => { if (!creatingUser) setCreateModalOpen(false); }} disabled={creatingUser} className="px-5 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold">Cancel</button>
                 <button type="submit" disabled={creatingUser} className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold">
                   <UserPlus size={18} />{creatingUser ? 'Creating...' : 'Create User'}
                 </button>
