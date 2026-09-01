@@ -264,6 +264,20 @@ export default async function handler(req, res) {
   try {
     const mode = String(req.query?.mode || '');
 
+    if (mode === 'list') {
+      await verifyAdmin(req);
+      const db = getAdminDb();
+      const snapshot = await db.collection('gmailSent')
+        .orderBy('sentAt', 'desc')
+        .limit(200)
+        .get();
+
+      return res.status(200).json({
+        ok: true,
+        items: snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
+      });
+    }
+
     if (mode === 'sync') {
       const cronAuth = req.headers.authorization || '';
       const isCron = Boolean(process.env.CRON_SECRET && cronAuth === 'Bearer ' + process.env.CRON_SECRET);
