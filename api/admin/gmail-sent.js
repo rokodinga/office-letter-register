@@ -96,7 +96,9 @@ function recipientMatchesPolicy(to, cc = '') {
   );
 
   if (!allowedRecipients.length && !allowedDomains.length) {
-    throw new Error('Gmail sent-mail sync is locked: configure GMAIL_OUTGOING_ALLOWED_RECIPIENTS or GMAIL_OUTGOING_ALLOWED_DOMAINS.');
+    throw new Error(
+      'Gmail sent-mail sync is locked: configure GMAIL_OUTGOING_ALLOWED_RECIPIENTS or GMAIL_OUTGOING_ALLOWED_DOMAINS.',
+    );
   }
 
   const addresses = [...parseAddresses(to), ...parseAddresses(cc)].map(parseEmailAddress);
@@ -107,48 +109,81 @@ function recipientMatchesPolicy(to, cc = '') {
   });
 }
 
+async function listSentMessages(token, dateQuery, pageToken = '') {
+  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+  url.searchParams.set('maxResults', '100');
+  // Use Gmail search as the source of truth. labelIds=SENT + q=in:sent can
+  // unnecessarily constrain searches for some Gmail accounts.
+  url.searchParams.set('q', 'in:sent ' + dateQuery);
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+  const response = await fetch(url, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Gmail sent-mail list request failed.');
+  }
+
+  return data;
+}
+
+async function getSentMessage(token, messageId) {
+  const url = new URL(
+    'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + messageId,
+  );
+  url.searchParams.set('format', 'metadata');
+  for (const name of ['Subject', 'From', 'To', 'Cc', 'Date']) {
+    url.searchParams.append('metadataHeaders', name);
+  }
+
+  const response = await fetch(url, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  const data = await response.json();
+
+  return response.ok ? data : null;
+}
+
 async function syncSentMailbox(db, connectionId, refreshToken) {
   const token = await accessToken(refreshToken);
   const connection = (await db.collection('gmailConnections').doc(connectionId).get()).data();
-  const lastSyncMillis = connection?.lastSentSyncAt?.toMillis?.();
-  const dateQuery = lastSyncMillis
-    ? 'after:' + Math.floor(lastSyncMillis / 1000)
-    : 'newer_than:30d';
 
+  // Always use a generous overlap window. The previous implementation used
+  // the exact server timestamp from the prior sync, which could cause Gmail
+  // messages to be missed between syncs and could leave a stale cursor that
+  // returned an empty result forever.
+  const lastSyncMillis = connection?.lastSentSyncAt?.toMillis?.();
+  const overlapMillis = 10 * 60 * 1000;
+  const dateQuery = lastSyncMillis
+    ? 'after:' + Math.max(0, Math.floor((lastSyncMillis - overlapMillis) / 1000))
+    : 'newer_than:90d';
+
+  let examined = 0;
   let processed = 0;
   let createdPending = 0;
   let skippedFiltered = 0;
+  let alreadyRegistered = 0;
   let pageToken = '';
+  let newestMessageMillis = lastSyncMillis || 0;
 
-  for (let page = 0; page < 5; page += 1) {
-    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
-    url.searchParams.set('maxResults', '100');
-    url.searchParams.set('labelIds', 'SENT');
-    url.searchParams.set('q', 'in:sent ' + dateQuery);
-    if (pageToken) url.searchParams.set('pageToken', pageToken);
-
-    const listResponse = await fetch(url, {
-      headers: { Authorization: 'Bearer ' + token },
-    });
-    const list = await listResponse.json();
-    if (!listResponse.ok) throw new Error(list.error?.message || 'Gmail sent-mail list request failed.');
-
-    const messages = list.messages || [];
+  for (let page = 0; page < 10; page += 1) {
+    const list = await listSentMessages(token, dateQuery, pageToken);
+    const messages = Array.isArray(list.messages) ? list.messages : [];
 
     for (let i = 0; i < messages.length; i += 10) {
       const batch = messages.slice(i, i + 10);
-      const details = await Promise.all(batch.map(async (message) => {
-        const detailResponse = await fetch(
-          'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + message.id
-            + '?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Date',
-          { headers: { Authorization: 'Bearer ' + token } },
-        );
-        const detail = await detailResponse.json();
-        return detailResponse.ok ? detail : null;
-      }));
+      const details = await Promise.all(
+        batch.map((message) => getSentMessage(token, message.id)),
+      );
 
       for (const detail of details) {
         if (!detail) continue;
+
+        examined += 1;
+        const internalMillis = detail.internalDate ? Number(detail.internalDate) : 0;
+        if (internalMillis > newestMessageMillis) newestMessageMillis = internalMillis;
 
         const headers = detail.payload?.headers || [];
         const subject = header(headers, 'Subject') || '(No subject)';
@@ -162,7 +197,8 @@ async function syncSentMailbox(db, connectionId, refreshToken) {
         }
 
         const dateHeader = header(headers, 'Date');
-        const dateValue = dateHeader || (detail.internalDate ? new Date(Number(detail.internalDate)).toISOString() : new Date().toISOString());
+        const dateValue = dateHeader
+          || (internalMillis ? new Date(internalMillis).toISOString() : new Date().toISOString());
         const gmailUrl = 'https://mail.google.com/mail/u/0/#sent/' + detail.id;
         const gmailRef = db.collection('gmailSent').doc(detail.id);
         const existing = (await gmailRef.get()).data();
@@ -178,7 +214,7 @@ async function syncSentMailbox(db, connectionId, refreshToken) {
           snippet: detail.snippet || '',
           url: gmailUrl,
           source: 'gmail',
-          sentAt: detail.internalDate ? Number(detail.internalDate) : Date.now(),
+          sentAt: internalMillis || Date.now(),
           syncedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
 
@@ -188,6 +224,8 @@ async function syncSentMailbox(db, connectionId, refreshToken) {
             reviewStatus: 'pending',
           }, { merge: true });
           createdPending += 1;
+        } else {
+          alreadyRegistered += 1;
         }
 
         processed += 1;
@@ -198,13 +236,28 @@ async function syncSentMailbox(db, connectionId, refreshToken) {
     if (!pageToken || messages.length === 0) break;
   }
 
+  // Only advance the cursor after the entire mailbox scan completed
+  // successfully. If Gmail returned an error, the catch path leaves the
+  // previous cursor intact so the next sync can retry.
+  const cursorMillis = newestMessageMillis || Date.now();
   await db.collection('gmailConnections').doc(connectionId).set({
-    lastSentSyncAt: FieldValue.serverTimestamp(),
+    lastSentSyncAt: cursorMillis,
+    lastSentSyncAtDate: new Date(cursorMillis).toISOString(),
+    lastSentSyncExamined: examined,
+    lastSentSyncProcessed: processed,
+    lastSentSyncFiltered: skippedFiltered,
+    lastSentSyncAtServer: FieldValue.serverTimestamp(),
     lastError: FieldValue.delete(),
     lastErrorAt: FieldValue.delete(),
   }, { merge: true });
 
-  return { processed, createdPending, skippedFiltered };
+  return {
+    examined,
+    processed,
+    createdPending,
+    skippedFiltered,
+    alreadyRegistered,
+  };
 }
 
 export default async function handler(req, res) {
@@ -218,9 +271,11 @@ export default async function handler(req, res) {
 
       const db = getAdminDb();
       const connections = await db.collection('gmailConnections').where('active', '==', true).get();
+      let examined = 0;
       let processed = 0;
       let createdPending = 0;
       let skippedFiltered = 0;
+      let alreadyRegistered = 0;
       const errors = [];
 
       for (const item of connections.docs) {
@@ -229,9 +284,11 @@ export default async function handler(req, res) {
 
         try {
           const result = await syncSentMailbox(db, item.id, data.refreshToken);
+          examined += result.examined;
           processed += result.processed;
           createdPending += result.createdPending;
           skippedFiltered += result.skippedFiltered;
+          alreadyRegistered += result.alreadyRegistered;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Gmail sent-mail sync failed.';
           const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : '';
@@ -256,9 +313,11 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: errors.length === 0,
+        examined,
         processed,
         createdPending,
         skippedFiltered,
+        alreadyRegistered,
         errors,
       });
     }
@@ -283,6 +342,11 @@ export default async function handler(req, res) {
       for (const connection of connections.docs) {
         await connection.ref.set({
           lastSentSyncAt: FieldValue.delete(),
+          lastSentSyncAtDate: FieldValue.delete(),
+          lastSentSyncExamined: FieldValue.delete(),
+          lastSentSyncProcessed: FieldValue.delete(),
+          lastSentSyncFiltered: FieldValue.delete(),
+          lastSentSyncAtServer: FieldValue.delete(),
           lastError: FieldValue.delete(),
           lastErrorAt: FieldValue.delete(),
         }, { merge: true });
@@ -294,6 +358,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Unknown Gmail sent-mail operation.' });
   } catch (error) {
     console.error('Gmail sent-mail API error:', error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : 'Gmail sent-mail operation failed.' });
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Gmail sent-mail operation failed.',
+    });
   }
 }
