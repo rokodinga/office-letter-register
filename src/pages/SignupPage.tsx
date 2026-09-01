@@ -44,7 +44,24 @@ export function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-800 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-4xl mb-6 px-2">
+          <div className="flex items-center justify-center gap-4 text-center">
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png"
+              alt="Government of Odisha emblem"
+              className="h-16 w-16 object-contain shrink-0"
+            />
+            <div>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight text-white">
+                Forest, Environment &amp; Climate Change Department Govt of Odisha
+              </h1>
+              <p className="mt-1 text-sm sm:text-base md:text-lg font-semibold text-blue-100">
+                Forest Range Office, Kodinga
+              </p>
+            </div>
+          </div>
+        </div>
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Office Letter Register</h1>
