@@ -522,6 +522,35 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
     }
   };
 
+  const openSentForReview = (item: GmailSentItem) => {
+    if (!isAdmin || type !== 'outgoing') return;
+
+    setEditingId(null);
+    setForm({
+      ...emptyForm(),
+      sourceType: 'gmailSent',
+      sourceGmailMessageId: item.id,
+      date: item.date ? new Date(item.date).toISOString().slice(0, 10) : today(),
+      party: item.to || '',
+      subject: item.subject || '',
+      attachments: [{
+        kind: 'email',
+        id: item.id,
+        name: item.subject || 'Sent Email',
+        url: item.url,
+        direction: 'sent',
+        subject: item.subject || '',
+        from: item.from,
+        to: item.to,
+        date: item.date,
+      }],
+    });
+    setSourceSearch(item.subject || item.to || '');
+    setError('');
+    setMessage('');
+    setShowForm(true);
+  };
+
   const handleSentSync = async () => {
     setSyncingSent(true);
     setError('');
@@ -530,6 +559,11 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
       const data = await syncSentGmail();
       const items = await loadSentGmail();
       setSentItems(items);
+
+      const pending = items
+        .filter((item) => !item.registeredLetterId)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
       setMessage(
         'Gmail Sent sync complete. ' +
         (data.processed || 0) +
@@ -539,6 +573,13 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
         (data.createdPending || 0) +
         ' new messages added to the selection queue.',
       );
+
+      // A successful sync should take the administrator directly to the
+      // first pending message instead of leaving the queue hidden inside
+      // the manual registration dialog.
+      if ((data.createdPending || 0) > 0 && pending.length > 0) {
+        openSentForReview(pending[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sync Gmail sent mail.');
     } finally {
@@ -555,6 +596,8 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
 
     try {
       const data = await cleanupSentGmail();
+      const items = await loadSentGmail();
+      setSentItems(items);
       setMessage('Gmail Sent selection queue cleared. Deleted ' + (data.deleted || 0) + ' unregistered entries. Gmail messages were not deleted.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to clear Gmail sent queue.');
@@ -627,6 +670,66 @@ export function LetterRegisterPage({ type }: { type: LetterType }) {
             <strong>New outgoing workflow:</strong> keep <strong>Manual Entry</strong> for physical letters, or choose an existing <strong>Incoming Letter</strong> / <strong>Gmail Sent</strong> message and the system will prefill the register fields. Selecting a source never deletes or modifies the original record.
           </div>
         )}
+
+        {isAdmin && type === 'outgoing' && (() => {
+          const pendingSent = sentItems
+            .filter((item) => !item.registeredLetterId)
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+          return (
+            <div className="mb-6 rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-emerald-50 px-5 py-4">
+                <div>
+                  <h2 className="font-bold text-slate-900">Pending Gmail Sent Selection Queue</h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {pendingSent.length} message{pendingSent.length === 1 ? '' : 's'} waiting for review. These are not official register records until you approve and save them.
+                  </p>
+                </div>
+                {pendingSent.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => openSentForReview(pendingSent[0])}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700"
+                  >
+                    Review First
+                  </button>
+                )}
+              </div>
+
+              {pendingSent.length > 0 ? (
+                <div className="divide-y">
+                  {pendingSent.slice(0, 10).map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-900 truncate">{item.subject || '(No subject)'}</div>
+                        <div className="text-xs text-slate-600 mt-1">
+                          To: {item.to || 'Unknown recipient'} • {formatDate(item.date)}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1 line-clamp-2">{item.snippet || 'No message preview.'}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openSentForReview(item)}
+                        className="shrink-0 rounded-lg border border-blue-200 bg-white px-4 py-2.5 font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        Review & Register
+                      </button>
+                    </div>
+                  ))}
+                  {pendingSent.length > 10 && (
+                    <div className="px-5 py-3 text-xs text-slate-500 bg-slate-50">
+                      Showing the 10 most recent pending messages. Use the source selector in the registration form to search the full queue.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="px-5 py-5 text-sm text-slate-500">
+                  No pending Gmail Sent messages. Click <strong>Sync Gmail Sent</strong> to check Gmail again.
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
           <div className="relative">
