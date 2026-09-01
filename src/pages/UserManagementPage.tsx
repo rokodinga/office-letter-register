@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, KeyRound, Shield, UserCheck, UserX, Trash2, LogOut, X, Plus, UserPlus } from 'lucide-react';
 import { auth } from '../firebase/config';
+import { ProfileAvatar } from '../components/ProfileAvatar';
 import type { UserRole, UserStatus } from '../firebase/auth-context';
 
 interface ManagedUser {
@@ -37,28 +38,6 @@ async function adminRequest(path: string, options: RequestInit = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Administrator request failed.');
   return body;
-}
-
-function resolveProfilePhotoUrl(value?: string | null): string {
-  const raw = value?.trim() || '';
-  if (!raw) return '';
-
-  try {
-    const url = new URL(raw);
-    const hostname = url.hostname.toLowerCase();
-
-    if (hostname === 'drive.google.com' || hostname === 'www.drive.google.com') {
-      const pathMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
-      const id = pathMatch?.[1] || url.searchParams.get('id');
-      if (id) {
-        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w400`;
-      }
-    }
-
-    return raw;
-  } catch {
-    return '';
-  }
 }
 
 function formatDate(value: string | null) {
@@ -181,10 +160,22 @@ export function UserManagementPage() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <nav className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <Link to="/dashboard" className="text-2xl font-bold text-blue-900">Office Letter Register</Link>
-          <Link to="/dashboard" className="flex items-center gap-2 text-blue-600 font-semibold"><ArrowLeft size={18} /> Dashboard</Link>
+      <nav className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3 sm:px-6">
+          <Link to="/dashboard" className="flex min-w-0 items-center gap-3" aria-label="Office Letter Register dashboard">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png"
+                alt="Government of Odisha emblem"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-extrabold text-blue-950 sm:text-base">Forest, Environment &amp; Climate Change Department</div>
+              <div className="truncate text-xs font-semibold text-slate-500 sm:text-sm">Forest Range Office, Kodinga</div>
+            </div>
+          </Link>
+          <Link to="/dashboard" className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-blue-700 transition hover:bg-blue-50"><ArrowLeft size={18} /> <span className="hidden sm:inline">Dashboard</span></Link>
         </div>
       </nav>
 
@@ -224,31 +215,11 @@ export function UserManagementPage() {
               </thead>
               <tbody className="divide-y">
                 {users.map((item) => {
-                  const profilePhoto = resolveProfilePhotoUrl(item.photoURL);
-                  const initials = (item.displayName || item.email || 'U').charAt(0).toUpperCase();
                   return (
                     <tr key={item.uid} className="hover:bg-slate-50">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          {profilePhoto ? (
-                            <img
-                              src={profilePhoto}
-                              alt=""
-                              className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                              onError={(event) => {
-                                event.currentTarget.style.display = 'none';
-                                const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
-                                if (fallback) fallback.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div
-                            className="w-10 h-10 rounded-full bg-blue-100 text-blue-800 items-center justify-center font-bold"
-                            style={{ display: profilePhoto ? 'none' : 'flex' }}
-                            aria-hidden="true"
-                          >
-                            {initials}
-                          </div>
+                          <ProfileAvatar photoURL={item.photoURL} name={item.displayName || item.email} size="md" />
                           <div><div className="font-semibold text-slate-900">{item.displayName || 'Unnamed user'}</div><div className="text-sm text-slate-500">{item.email}</div></div>
                         </div>
                       </td>
@@ -347,21 +318,7 @@ export function UserManagementPage() {
             </div>
             <div className="p-6">
               <div className="flex items-center gap-4 mb-6">
-                {resolveProfilePhotoUrl(selectedUser.photoURL) ? (
-                  <img
-                    src={resolveProfilePhotoUrl(selectedUser.photoURL)}
-                    alt=""
-                    className="w-20 h-20 rounded-full object-cover border-4 border-blue-100"
-                    onError={(event) => {
-                      event.currentTarget.style.display = 'none';
-                      const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
-                      if (fallback) fallback.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
-                <div className="w-20 h-20 rounded-full bg-blue-100 text-blue-800 items-center justify-center text-3xl font-bold" style={{ display: resolveProfilePhotoUrl(selectedUser.photoURL) ? 'none' : 'flex' }}>
-                  {(selectedUser.displayName || selectedUser.email || 'U').charAt(0).toUpperCase()}
-                </div>
+                <ProfileAvatar photoURL={selectedUser.photoURL} name={selectedUser.displayName || selectedUser.email} size="lg" />
                 <div><h3 className="text-2xl font-bold text-slate-900">{selectedUser.displayName || 'Unnamed user'}</h3><p className="text-slate-500 break-all">{selectedUser.email}</p></div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
