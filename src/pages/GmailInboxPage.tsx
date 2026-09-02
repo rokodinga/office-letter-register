@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { collection, getDocs, limit, query, orderBy } from 'firebase/firestore';
 import { ArrowLeft, CheckCircle2, Inbox, Loader2, Mail, RefreshCw, Search, ShieldAlert, ExternalLink, Unplug } from 'lucide-react';
 import { db, auth } from '../firebase/config';
@@ -54,7 +54,6 @@ async function apiRequest(mode: string, method = 'GET') {
 
 export function GmailInboxPage() {
   const { userProfile } = useAuth();
-  const navigate = useNavigate();
   const isAdmin = userProfile?.role === 'Administrator';
 
   const [items, setItems] = useState<GmailItem[]>([]);
@@ -168,16 +167,24 @@ export function GmailInboxPage() {
     }
   };
 
+  // The Gmail page is a review queue, not a second Incoming Dak register.
+  // Registered messages stay in Firestore for traceability but are intentionally
+  // hidden here so the administrator only sees correspondence that still needs action.
+  const pendingItems = useMemo(
+    () => items.filter((item) => !item.registered && !item.registeredLetterId),
+    [items],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) =>
+    if (!q) return pendingItems;
+    return pendingItems.filter((item) =>
       [item.subject, item.from, item.to, item.date, item.snippet]
         .join(' ')
         .toLowerCase()
         .includes(q),
     );
-  }, [items, search]);
+  }, [pendingItems, search]);
 
   if (!isAdmin) {
     return (
@@ -314,7 +321,12 @@ export function GmailInboxPage() {
               className="w-full border rounded-lg pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="text-sm text-slate-500">{items.length} synced inbox messages</div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 font-semibold text-amber-800">
+              {pendingItems.length} Pending
+            </span>
+            <span className="text-slate-500">awaiting review</span>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -325,7 +337,9 @@ export function GmailInboxPage() {
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center text-slate-500">
               <Mail className="mx-auto mb-3 text-slate-400" size={36} />
-              {status.connected ? 'No synchronized inbox messages yet. Click “Sync Now”.' : 'Connect Gmail to begin synchronization.'}
+              {status.connected
+                ? 'No pending Gmail correspondence. New approved emails will appear here after the next sync.'
+                : 'Connect Gmail to begin synchronization.'}
             </div>
           ) : (
             <div className="divide-y">
@@ -334,15 +348,9 @@ export function GmailInboxPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h2 className="font-bold text-slate-900">{item.subject}</h2>
-                      {item.registered ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold">
-                          <CheckCircle2 size={13} /> Registered Incoming Dak
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-1 text-xs font-semibold">
-                          Pending Review
-                        </span>
-                      )}
+                      <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-1 text-xs font-semibold">
+                        Pending Review
+                      </span>
                     </div>
                     <div className="text-sm text-slate-600">{item.from} {item.to ? `→ ${item.to}` : ''}</div>
                     <div className="text-xs text-slate-500 mt-1">{item.date}</div>
@@ -359,21 +367,12 @@ export function GmailInboxPage() {
                       <ExternalLink size={16} /> Open Gmail
                     </a>
 
-                    {item.registeredLetterId ? (
-                      <button
-                        onClick={() => navigate('/incoming')}
-                        className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
-                      >
-                        View Incoming Dak
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => navigate(`/incoming?gmailId=${encodeURIComponent(item.id)}`)}
-                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
-                      >
-                        Review & Register
-                      </button>
-                    )}
+                    <button
+                      onClick={() => window.location.href = `/incoming?gmailId=${encodeURIComponent(item.id)}`}
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm font-semibold"
+                    >
+                      Review & Register
+                    </button>
                   </div>
                 </div>
               ))}
@@ -382,9 +381,9 @@ export function GmailInboxPage() {
         </div>
 
         <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <strong>Workflow:</strong> Gmail sync first filters Gmail by the configured official sender/domain allowlist and Primary inbox, then imports matching messages into this review queue only.
-          Open <strong>Review & Register</strong> to check and edit the office fields, attach supporting files from Google Drive,
-          and explicitly register the message as Incoming Dak. The original email remains in Gmail.
+          <strong>Review queue:</strong> This page shows only Gmail correspondence that has not yet been registered as Incoming Dak.
+          Once you approve and register a message, it disappears from this queue and remains available in the Incoming Dak register.
+          The original email remains in Gmail for traceability.
         </div>
       </main>
     </div>
