@@ -213,7 +213,7 @@ function buildHistoricalGmailQuery(fromDate, toDate, searchTerm = '') {
     .trim();
 
   return 'after:' + Math.floor(new Date(fromDate + 'T00:00:00Z').getTime() / 1000 - 1)
-    + ' before:' + Math.floor(new Date(toDate + 'T00:00:00Z').getTime() / 1000)
+    + ' before:' + Math.floor((new Date(toDate + 'T00:00:00Z').getTime() + 24 * 60 * 60 * 1000) / 1000)
     + ' category:primary'
     + ' -category:social'
     + ' -category:promotions'
@@ -322,6 +322,23 @@ async function historicalGmail(db, connectionId, refreshToken, params, shouldImp
     const batch = rawMessages.slice(i, i + 10);
     const resolved = await Promise.all(batch.map((message) => getGmailMetadata(token, message.id)));
     details.push(...resolved.filter(Boolean));
+  }
+
+  // Reconcile the historical browser with the application's registration
+  // database so an old Gmail message is clearly shown as Registered/Pending.
+  if (details.length) {
+    const refs = details.map((item) => db.collection('gmailInbox').doc(item.id));
+    const existingDocs = await db.getAll(...refs);
+    const existingById = new Map(
+      existingDocs.map((snapshot) => [snapshot.id, snapshot.exists ? snapshot.data() : null]),
+    );
+
+    for (const item of details) {
+      const existing = existingById.get(item.id);
+      item.registered = Boolean(existing?.registeredLetterId || existing?.registered === true);
+      item.registeredLetterId = existing?.registeredLetterId || null;
+      item.reviewStatus = item.registered ? 'registered' : 'pending';
+    }
   }
 
   let imported = 0;
