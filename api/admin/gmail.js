@@ -192,6 +192,156 @@ function buildGmailQuery(lastSyncMillis) {
     + ' ' + senderQuery;
 }
 
+function buildHistoricalGmailQuery(fromDate, toDate, searchTerm = '') {
+  const { allowedSenders, allowedDomains } = gmailSyncPolicy();
+
+  // Gmail's "before:" is exclusive, so the UI supplies the day after
+  // the requested end date.
+  const senderParts = [
+    ...allowedSenders.map((sender) => 'from:' + sender),
+    ...allowedDomains.map((domain) => 'from:' + domain),
+  ];
+
+  const senderQuery = senderParts.length > 1
+    ? '{' + senderParts.join(' ') + '}'
+    : senderParts[0];
+
+  const safeSearch = String(searchTerm || '')
+    .replace(/[\\"]/g, ' ')
+    .replace(/[^\\p{L}\\p{N} @._+:-]/gu, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+
+  return 'after:' + Math.floor(new Date(fromDate + 'T00:00:00Z').getTime() / 1000 - 1)
+    + ' before:' + Math.floor(new Date(toDate + 'T00:00:00Z').getTime() / 1000)
+    + ' category:primary'
+    + ' -category:social'
+    + ' -category:promotions'
+    + ' -category:updates'
+    + ' -category:forums'
+    + ' -category:reservations'
+    + ' -category:purchases'
+    + ' ' + senderQuery
+    + (safeSearch ? ' "' + safeSearch + '"' : '');
+}
+
+async function listHistoricalMessages(token, gmailQuery, pageToken = '') {
+  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+  url.searchParams.set('maxResults', '100');
+  url.searchParams.set('labelIds', 'INBOX');
+  url.searchParams.set('q', gmailQuery);
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+  const response = await fetch(url, {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || 'Gmail historical search failed.');
+  return data;
+}
+
+async function getGmailMetadata(token, messageId) {
+  const detailResponse = await fetch(
+    'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + messageId
+      + '?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date',
+    { headers: { Authorization: 'Bearer ' + token } },
+  );
+  const detail = await detailResponse.json();
+  if (!detailResponse.ok) return null;
+
+  const headers = detail.payload?.headers || [];
+  const subject = header(headers, 'Subject') || '(No subject)';
+  const from = header(headers, 'From');
+  if (!senderMatchesPolicy(from)) return null;
+
+  return {
+    id: detail.id,
+    threadId: detail.threadId || null,
+    subject,
+    from,
+    to: header(headers, 'To'),
+    date: header(headers, 'Date'),
+    snippet: detail.snippet || '',
+    url: 'https://mail.google.com/mail/u/0/#inbox/' + detail.id,
+    receivedAt: detail.internalDate ? Number(detail.internalDate) : Date.now(),
+  };
+}
+
+async function saveGmailReviewItem(db, profileEmail, item) {
+  const gmailRef = db.collection('gmailInbox').doc(item.id);
+  const existing = (await gmailRef.get()).data();
+
+  await gmailRef.set({
+    ...item,
+    source: 'gmail',
+    syncedAt: FieldValue.serverTimestamp(),
+    gmailAccount: profileEmail || null,
+  }, { merge: true });
+
+  if (!existing?.registeredLetterId && existing?.registered !== true) {
+    await gmailRef.set({
+      registered: false,
+      reviewStatus: 'pending',
+    }, { merge: true });
+    return true;
+  }
+
+  return false;
+}
+
+async function historicalGmail(db, connectionId, refreshToken, params, shouldImport = false) {
+  const fromDate = String(params.from || '');
+  const toDate = String(params.to || '');
+  const searchTerm = String(params.search || '');
+  const pageToken = String(params.pageToken || '');
+
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(fromDate)
+    || !/^\\d{4}-\\d{2}-\\d{2}$/.test(toDate)) {
+    throw new Error('Historical Gmail search requires valid from and to dates (YYYY-MM-DD).');
+  }
+
+  const fromMillis = new Date(fromDate + 'T00:00:00Z').getTime();
+  const toMillis = new Date(toDate + 'T23:59:59Z').getTime();
+  if (!Number.isFinite(fromMillis) || !Number.isFinite(toMillis) || fromMillis > toMillis) {
+    throw new Error('Historical Gmail date range is invalid.');
+  }
+
+  // Protect the API from accidental multi-year bulk requests.
+  if (toMillis - fromMillis > 366 * 24 * 60 * 60 * 1000) {
+    throw new Error('Please search a maximum of 12 months at a time.');
+  }
+
+  const token = await accessToken(refreshToken);
+  const profile = await gmailProfile(token);
+  const gmailQuery = buildHistoricalGmailQuery(fromDate, toDate, searchTerm);
+  const list = await listHistoricalMessages(token, gmailQuery, pageToken);
+
+  const rawMessages = list.messages || [];
+  const details = [];
+  for (let i = 0; i < rawMessages.length; i += 10) {
+    const batch = rawMessages.slice(i, i + 10);
+    const resolved = await Promise.all(batch.map((message) => getGmailMetadata(token, message.id)));
+    details.push(...resolved.filter(Boolean));
+  }
+
+  let imported = 0;
+  if (shouldImport) {
+    for (const item of details) {
+      if (await saveGmailReviewItem(db, profile.emailAddress, item)) imported += 1;
+    }
+  }
+
+  return {
+    ok: true,
+    items: details,
+    nextPageToken: list.nextPageToken || null,
+    resultSizeEstimate: Number(list.resultSizeEstimate || details.length),
+    imported,
+    from: fromDate,
+    to: toDate,
+  };
+}
+
 async function gmailProfile(token) {
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
     headers: { Authorization: `Bearer ${token}` },
@@ -450,6 +600,27 @@ export default async function handler(req, res) {
       const db = getAdminDb();
       await db.collection('gmailConnections').doc(uid).delete();
       return res.status(200).json({ ok: true });
+    }
+
+
+    if (mode === 'history' || mode === 'history-sync') {
+      const uid = await verifyAdmin(req);
+      const db = getAdminDb();
+      const connection = await db.collection('gmailConnections').doc(uid).get();
+
+      if (!connection.exists || !connection.data()?.refreshToken || !connection.data()?.active) {
+        throw new Error('Gmail is not connected. Reconnect Gmail before searching historical mail.');
+      }
+
+      return res.status(200).json(
+        await historicalGmail(
+          db,
+          uid,
+          connection.data().refreshToken,
+          req.query || {},
+          mode === 'history-sync',
+        ),
+      );
     }
 
     if (mode === 'sync') {
