@@ -98,6 +98,7 @@ export function GmailInboxPage() {
   const [historySearch, setHistorySearch] = useState('');
   const [historyItems, setHistoryItems] = useState<GmailItem[]>([]);
   const [historyNextPage, setHistoryNextPage] = useState('');
+  const [historyCurrentPageToken, setHistoryCurrentPageToken] = useState('');
   const [historyEstimate, setHistoryEstimate] = useState(0);
 
   const reloadInbox = async () => {
@@ -218,13 +219,15 @@ export function GmailInboxPage() {
     setError('');
     setMessage('');
     try {
+      const currentPageToken = append && historyNextPage ? historyNextPage : '';
       const data = await apiRequest('history', 'GET', {
         from: historyFrom,
         to: historyTo,
         search: historySearch,
-        ...(append && historyNextPage ? { pageToken: historyNextPage } : {}),
+        ...(currentPageToken ? { pageToken: currentPageToken } : {}),
       });
 
+      setHistoryCurrentPageToken(currentPageToken);
       setHistoryItems((current) => append ? [...current, ...(data.items || [])] : (data.items || []));
       setHistoryNextPage(data.nextPageToken || '');
       setHistoryEstimate(Number(data.resultSizeEstimate || data.items?.length || 0));
@@ -246,7 +249,7 @@ export function GmailInboxPage() {
         from: historyFrom,
         to: historyTo,
         search: historySearch,
-        ...(historyNextPage ? {} : {}),
+        ...(historyCurrentPageToken ? { pageToken: historyCurrentPageToken } : {}),
       });
       await reloadInbox();
       setMessage(
