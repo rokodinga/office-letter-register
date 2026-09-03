@@ -295,8 +295,8 @@ async function historicalGmail(db, connectionId, refreshToken, params, shouldImp
   const searchTerm = String(params.search || '');
   const pageToken = String(params.pageToken || '');
 
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(fromDate)
-    || !/^\\d{4}-\\d{2}-\\d{2}$/.test(toDate)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate)
+    || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
     throw new Error('Historical Gmail search requires valid from and to dates (YYYY-MM-DD).');
   }
 
