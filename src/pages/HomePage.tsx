@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -13,7 +14,55 @@ import {
 
 const ODISHA_EMBLEM = 'https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png';
 
+type RegisterStats = {
+  incoming: number;
+  outgoing: number;
+  total: number;
+};
+
 export function HomePage() {
+  const [stats, setStats] = useState<RegisterStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/public/stats', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Unable to load register statistics.');
+
+        const data = await response.json();
+        if (!data?.ok) throw new Error('Unable to load register statistics.');
+
+        if (!cancelled) {
+          setStats({
+            incoming: Number(data.incoming || 0),
+            outgoing: Number(data.outgoing || 0),
+            total: Number(data.total || 0),
+          });
+        }
+      } catch {
+        // Keep the public landing page usable even if the stats endpoint is
+        // temporarily unavailable. The next polling cycle will retry.
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    };
+
+    loadStats();
+    const intervalId = window.setInterval(loadStats, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const incomingDisplay = statsLoading && !stats ? '—' : String(stats?.incoming ?? '—');
+  const outgoingDisplay = statsLoading && !stats ? '—' : String(stats?.outgoing ?? '—');
+  const totalDisplay = statsLoading && !stats ? '—' : String(stats?.total ?? '—');
+
   return (
     <div className="home-page min-h-screen overflow-hidden bg-slate-50 text-slate-900">
       <div className="home-orb home-orb-one" aria-hidden="true" />
@@ -108,8 +157,14 @@ export function HomePage() {
               <div className="relative">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Digital Register</p>
-                    <h2 className="mt-1 text-xl font-extrabold text-slate-950">Today at a glance</h2>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Digital Register</p>
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        Live
+                      </span>
+                    </div>
+                    <h2 className="mt-1 text-xl font-extrabold text-slate-950">Register at a glance</h2>
                   </div>
                   <div className="home-pulse flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
                     <FileText size={21} />
@@ -120,18 +175,18 @@ export function HomePage() {
                   <div className="home-mini-card rounded-2xl border border-blue-100 bg-blue-50/80 p-4">
                     <div className="flex items-center justify-between">
                       <Inbox size={19} className="text-blue-700" />
-                      <span className="text-2xl font-black text-slate-950">01</span>
+                      <span className="text-2xl font-black tabular-nums text-slate-950">{incomingDisplay}</span>
                     </div>
                     <p className="mt-4 text-sm font-bold text-slate-800">Incoming Dak</p>
-                    <p className="mt-1 text-xs text-slate-500">Received correspondence</p>
+                    <p className="mt-1 text-xs text-slate-500">Registered correspondence</p>
                   </div>
                   <div className="home-mini-card rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4">
                     <div className="flex items-center justify-between">
                       <ArrowRight size={19} className="rotate-[-45deg] text-emerald-700" />
-                      <span className="text-2xl font-black text-slate-950">00</span>
+                      <span className="text-2xl font-black tabular-nums text-slate-950">{outgoingDisplay}</span>
                     </div>
                     <p className="mt-4 text-sm font-bold text-slate-800">Outgoing Letters</p>
-                    <p className="mt-1 text-xs text-slate-500">Dispatched correspondence</p>
+                    <p className="mt-1 text-xs text-slate-500">Registered correspondence</p>
                   </div>
                 </div>
 
@@ -141,8 +196,8 @@ export function HomePage() {
                       <Search size={19} />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-slate-900">Search correspondence</p>
-                      <p className="text-xs text-slate-500">Find records in seconds</p>
+                      <p className="text-sm font-bold text-slate-900">Total registered records</p>
+                      <p className="text-xs text-slate-500">{totalDisplay} correspondence records</p>
                     </div>
                     <ChevronRight size={18} className="text-slate-400" />
                   </div>
