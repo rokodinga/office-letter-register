@@ -55,7 +55,7 @@ function App() {
           <Route path="/outgoing" element={<ProtectedRoute><LetterRegisterPage type="outgoing" /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
           <Route path="/" element={<HomePage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </Router>
