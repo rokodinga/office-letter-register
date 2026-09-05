@@ -8,7 +8,7 @@
   ],
   "functions": {
     "api/public/range-information.js": {
-      "includeFiles": ["public/data/kodinga-range-information.json.gz.b64"]
+      "includeFiles": "public/data/kodinga-range-information.json.gz.b64"
     }
   },
   "crons": [
