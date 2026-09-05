@@ -13,6 +13,7 @@ import { AdminAuditPage } from './pages/AdminAuditPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LetterRegisterPage } from './pages/LetterRegisterPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { RangeInformationPage } from './pages/RangeInformationPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import './App.css';
@@ -27,6 +28,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/range-information" element={<RangeInformationPage />} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
