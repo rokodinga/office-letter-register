@@ -1,6 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
+import { join } from 'node:path';
 
-const SOURCE = 'https://raw.githubusercontent.com/rokodinga/office-letter-register/main/public/data/kodinga-range-information.json.gz.b64';
+const DATA_FILE = join(process.cwd(), 'public', 'data', 'kodinga-range-information.json.gz.b64');
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -9,20 +11,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(SOURCE, {
-      headers: { Accept: 'text/plain' },
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      throw new Error(`Range source returned ${response.status}.`);
-    }
-
-    const encoded = (await response.text()).trim();
+    const encoded = (await readFile(DATA_FILE, 'utf8')).trim();
     if (!encoded) throw new Error('Range source is empty.');
 
     const json = gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
     const data = JSON.parse(json);
+    if (!data || !Array.isArray(data.sheets)) throw new Error('Range dataset is invalid.');
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
