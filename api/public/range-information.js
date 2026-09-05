@@ -4,7 +4,7 @@ const DATA_PATH = '/data/kodinga-range-information.json.gz.b64';
 
 function getOrigin(req) {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = String(req.headers.host || '').trim();
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (!host) throw new Error('Request host is unavailable.');
   return `${forwardedProto}://${host}`;
 }
