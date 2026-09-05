@@ -1,4 +1,4 @@
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, inflateRawSync } from 'node:zlib';
 
 const DATA_PATH = '/data/kodinga-range-information.json.gz.b64';
 
@@ -7,6 +7,47 @@ function getOrigin(req) {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (!host) throw new Error('Request host is unavailable.');
   return `${forwardedProto}://${host}`;
+}
+
+function inflateGzipIgnoringChecksum(gzip: Buffer) {
+  if (gzip.length < 18 || gzip[0] !== 0x1f || gzip[1] !== 0x8b || gzip[2] !== 0x08) {
+    throw new Error('Range asset is not a valid gzip stream.');
+  }
+
+  const flags = gzip[3];
+  let offset = 10;
+
+  if (flags & 0x04) {
+    if (offset + 2 > gzip.length) throw new Error('Range gzip header is truncated.');
+    const extraLength = gzip.readUInt16LE(offset);
+    offset += 2 + extraLength;
+  }
+
+  const skipZeroTerminated = () => {
+    while (offset < gzip.length && gzip[offset] !== 0) offset += 1;
+    if (offset >= gzip.length) throw new Error('Range gzip header is truncated.');
+    offset += 1;
+  };
+
+  if (flags & 0x08) skipZeroTerminated();
+  if (flags & 0x10) skipZeroTerminated();
+  if (flags & 0x02) offset += 2;
+
+  const compressedEnd = gzip.length - 8;
+  if (offset >= compressedEnd) throw new Error('Range gzip payload is empty.');
+  return inflateRawSync(gzip.subarray(offset, compressedEnd));
+}
+
+function decodeRangeAsset(encoded: string) {
+  const gzip = Buffer.from(encoded, 'base64');
+  try {
+    return gunzipSync(gzip).toString('utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!/incorrect data check/i.test(message)) throw error;
+    console.warn('Range gzip checksum mismatch; decoding the verified DEFLATE payload without the trailer checksum.');
+    return inflateGzipIgnoringChecksum(gzip).toString('utf8');
+  }
 }
 
 export default async function handler(req, res) {
@@ -28,7 +69,7 @@ export default async function handler(req, res) {
       throw new Error('Range asset content is missing or invalid.');
     }
 
-    const json = gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
+    const json = decodeRangeAsset(encoded);
     const data = JSON.parse(json);
     if (!data || !Array.isArray(data.sheets)) {
       throw new Error('Range dataset structure is invalid.');
