@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider } from './firebase/auth-context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminRoute } from './components/AdminRoute';
@@ -18,10 +18,27 @@ import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import './App.css';
 
+function RangeInformationShortcut() {
+  const { pathname } = useLocation();
+  if (pathname !== '/' && pathname !== '/dashboard') return null;
+
+  return (
+    <Link
+      to="/range-information"
+      className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white shadow-xl shadow-emerald-950/20 transition hover:-translate-y-0.5 hover:bg-emerald-800 print:hidden"
+      aria-label="Open Kodinga Range Information Centre"
+    >
+      <span aria-hidden="true">🌿</span>
+      Range Information Centre
+    </Link>
+  );
+}
+
 function App() {
   return (
     <Router>
       <AuthProvider>
+        <RangeInformationShortcut />
         <Routes>
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
