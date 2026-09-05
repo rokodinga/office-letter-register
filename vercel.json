@@ -6,11 +6,6 @@
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/public/range-information.js": {
-      "includeFiles": "public/data/kodinga-range-information.json.gz.b64"
-    }
-  },
   "crons": [
     {
       "path": "/api/admin/gmail?mode=sync",
