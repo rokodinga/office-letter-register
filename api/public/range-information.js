@@ -1,12 +1,20 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
 
-const DATA_PATH = '/data/kodinga-range-information.json.gz.b64';
+const DATA_FILE = 'public/data/kodinga-range-information.json.gz.b64';
 
-function getOrigin(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  if (!host) throw new Error('Request host is unavailable.');
-  return `${forwardedProto}://${host}`;
+function getAssetPath() {
+  const candidates = [
+    join(process.cwd(), DATA_FILE),
+    join('/var/task', DATA_FILE),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  throw new Error(`Range dataset file is not bundled. Checked: ${candidates.join(', ')}`);
 }
 
 function inflateGzipIgnoringChecksum(gzip) {
@@ -45,32 +53,34 @@ function decodeRangeAsset(encoded) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     if (!/incorrect data check/i.test(message)) throw error;
-    console.warn('Range gzip checksum mismatch; decoding the verified DEFLATE payload without the trailer checksum.');
+    console.warn('Range gzip checksum mismatch; decoding the DEFLATE payload without the trailer checksum.');
     return inflateGzipIgnoringChecksum(gzip).toString('utf8');
   }
 }
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed.' });
   }
 
+  let stage = 'asset-read';
+
   try {
-    const assetUrl = new URL(DATA_PATH, getOrigin(req));
-    const response = await fetch(assetUrl, { cache: 'no-store' });
+    const assetPath = getAssetPath();
+    const encoded = readFileSync(assetPath, 'utf8').trim();
 
-    if (!response.ok) {
-      throw new Error(`Range asset request failed (${response.status}).`);
-    }
-
-    const encoded = (await response.text()).trim();
     if (!encoded || !encoded.startsWith('H4sI')) {
       throw new Error('Range asset content is missing or invalid.');
     }
 
+    stage = 'gzip-decode';
     const json = decodeRangeAsset(encoded);
+
+    stage = 'json-parse';
     const data = JSON.parse(json);
+
+    stage = 'dataset-validation';
     if (!data || !Array.isArray(data.sheets)) {
       throw new Error('Range dataset structure is invalid.');
     }
@@ -79,10 +89,12 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800');
     return res.status(200).send(JSON.stringify(data));
   } catch (error) {
-    console.error('Public Range information error:', error);
+    const message = error instanceof Error ? error.message : 'Unable to load the Range information dataset.';
+    console.error('Public Range information error:', { stage, message });
     return res.status(502).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Unable to load the Range information dataset.',
+      stage,
+      error: message,
     });
   }
 }
