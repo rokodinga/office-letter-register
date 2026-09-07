@@ -3,14 +3,19 @@ import { gunzipSync, inflateRawSync } from 'node:zlib';
 const DATA_PATH = '/data/kodinga-range-information.json.gz.b64';
 
 function getOrigin(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https')
+    .split(',')[0]
+    .trim();
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .split(',')[0]
+    .trim();
+
   if (!host) throw new Error('Request host is unavailable.');
   return `${forwardedProto}://${host}`;
 }
 
-function inflateGzipIgnoringChecksum(gzip: Buffer) {
-  if (gzip.length < 18 || gzip[0] !== 0x1f || gzip[1] !== 0x8b || gzip[2] !== 0x08) {
+function inflateGzipIgnoringChecksum(gzip) {
+  if (!gzip || gzip.length < 18 || gzip[0] !== 0x1f || gzip[1] !== 0x8b || gzip[2] !== 0x08) {
     throw new Error('Range asset is not a valid gzip stream.');
   }
 
@@ -20,7 +25,8 @@ function inflateGzipIgnoringChecksum(gzip: Buffer) {
   if (flags & 0x04) {
     if (offset + 2 > gzip.length) throw new Error('Range gzip header is truncated.');
     const extraLength = gzip.readUInt16LE(offset);
-    offset += 2 + extraLength;
+    offset += 2;
+    offset += extraLength;
   }
 
   const skipZeroTerminated = () => {
@@ -31,21 +37,33 @@ function inflateGzipIgnoringChecksum(gzip: Buffer) {
 
   if (flags & 0x08) skipZeroTerminated();
   if (flags & 0x10) skipZeroTerminated();
-  if (flags & 0x02) offset += 2;
+  if (flags & 0x02) {
+    if (offset + 2 > gzip.length) throw new Error('Range gzip header is truncated.');
+    offset += 2;
+  }
 
   const compressedEnd = gzip.length - 8;
   if (offset >= compressedEnd) throw new Error('Range gzip payload is empty.');
+
   return inflateRawSync(gzip.subarray(offset, compressedEnd));
 }
 
-function decodeRangeAsset(encoded: string) {
+function decodeRangeAsset(encoded) {
   const gzip = Buffer.from(encoded, 'base64');
+
   try {
     return gunzipSync(gzip).toString('utf8');
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    if (!/incorrect data check/i.test(message)) throw error;
-    console.warn('Range gzip checksum mismatch; decoding the verified DEFLATE payload without the trailer checksum.');
+
+    if (!/incorrect data check/i.test(message)) {
+      throw error;
+    }
+
+    console.warn(
+      'Range gzip checksum mismatch; decoding the DEFLATE payload without the gzip trailer checksum.'
+    );
+
     return inflateGzipIgnoringChecksum(gzip).toString('utf8');
   }
 }
@@ -71,6 +89,7 @@ export default async function handler(req, res) {
 
     const json = decodeRangeAsset(encoded);
     const data = JSON.parse(json);
+
     if (!data || !Array.isArray(data.sheets)) {
       throw new Error('Range dataset structure is invalid.');
     }
