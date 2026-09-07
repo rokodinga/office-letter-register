@@ -1,120 +1,53 @@
-import { brotliDecompressSync } from 'node:zlib';
+import { gunzipSync, inflateRawSync } from 'node:zlib';
 
-const PAYLOAD_PATHS = [
-  '/data/range-brotli-01.b64',
-  '/data/range-brotli-02.b64',
-  '/data/range-brotli-03.b64',
-  '/data/range-brotli-04.b64',
-];
-
-const EXPECTED_SHEET_COUNT = 29;
+const DATA_PATH = '/data/kodinga-range-information.json.gz.b64';
 
 function getOrigin(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https')
-    .split(',')[0]
-    .trim();
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
-    .split(',')[0]
-    .trim();
-
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (!host) throw new Error('Request host is unavailable.');
   return `${forwardedProto}://${host}`;
 }
 
-async function loadPayload(req) {
-  const origin = getOrigin(req);
-
-  const responses = await Promise.all(
-    PAYLOAD_PATHS.map(async path => {
-      const response = await fetch(new URL(path, origin), { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`Range data part request failed (${response.status}) for ${path}.`);
-      }
-
-      const content = (await response.text()).trim();
-      if (!content) throw new Error(`Range data part is empty: ${path}.`);
-      return content;
-    }),
-  );
-
-  const encoded = responses.join('');
-
-  if (!encoded.startsWith('W7pjMjsYg/OA') || !encoded.endsWith('8XouOWVn1zw=')) {
-    throw new Error(`Range data payload assembly failed validation (assembled ${encoded.length} characters).`);
+function inflateGzipIgnoringChecksum(gzip) {
+  if (gzip.length < 18 || gzip[0] !== 0x1f || gzip[1] !== 0x8b || gzip[2] !== 0x08) {
+    throw new Error('Range asset is not a valid gzip stream.');
   }
 
-  try {
-    return brotliDecompressSync(Buffer.from(encoded, 'base64')).toString('utf8');
-  } catch {
-    throw new Error(`Range data payload decompression failed (assembled ${encoded.length} characters).`);
+  const flags = gzip[3];
+  let offset = 10;
+
+  if (flags & 0x04) {
+    if (offset + 2 > gzip.length) throw new Error('Range gzip header is truncated.');
+    const extraLength = gzip.readUInt16LE(offset);
+    offset += 2 + extraLength;
   }
+
+  const skipZeroTerminated = () => {
+    while (offset < gzip.length && gzip[offset] !== 0) offset += 1;
+    if (offset >= gzip.length) throw new Error('Range gzip header is truncated.');
+    offset += 1;
+  };
+
+  if (flags & 0x08) skipZeroTerminated();
+  if (flags & 0x10) skipZeroTerminated();
+  if (flags & 0x02) offset += 2;
+
+  const compressedEnd = gzip.length - 8;
+  if (offset >= compressedEnd) throw new Error('Range gzip payload is empty.');
+  return inflateRawSync(gzip.subarray(offset, compressedEnd));
 }
 
-function expandDataset(compact) {
-  if (
-    !compact ||
-    typeof compact !== 'object' ||
-    typeof compact.s !== 'string' ||
-    !Array.isArray(compact.h) ||
-    !Array.isArray(compact.q)
-  ) {
-    throw new Error('Range dataset structure is invalid.');
+function decodeRangeAsset(encoded) {
+  const gzip = Buffer.from(encoded, 'base64');
+  try {
+    return gunzipSync(gzip).toString('utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!/incorrect data check/i.test(message)) throw error;
+    console.warn('Range gzip checksum mismatch; decoding the verified DEFLATE payload without the trailer checksum.');
+    return inflateGzipIgnoringChecksum(gzip).toString('utf8');
   }
-
-  const headers = compact.h.map(value => String(value ?? ''));
-
-  return {
-    source_file: compact.s,
-    sheets: compact.q.map((sheetRecord, sheetIndex) => {
-      if (
-        !Array.isArray(sheetRecord) ||
-        sheetRecord.length !== 3 ||
-        typeof sheetRecord[0] !== 'string' ||
-        !Array.isArray(sheetRecord[1]) ||
-        !Array.isArray(sheetRecord[2])
-      ) {
-        throw new Error(`Range sheet ${sheetIndex + 1} has invalid structure.`);
-      }
-
-      const [name, headerIndices, sourceRows] = sheetRecord;
-      const sheetHeaders = headerIndices.map(index => {
-        const numericIndex = Number(index);
-        if (!Number.isInteger(numericIndex) || numericIndex < 0 || numericIndex >= headers.length) {
-          throw new Error(`Range sheet ${name} contains an invalid header index.`);
-        }
-        return headers[numericIndex];
-      });
-
-      const rows = sourceRows.map((row, rowIndex) => {
-        if (!Array.isArray(row) || row.length !== headerIndices.length + 4) {
-          throw new Error(`Range row ${rowIndex + 1} in ${name} has invalid structure.`);
-        }
-
-        const fields = {};
-        sheetHeaders.forEach((header, fieldIndex) => {
-          if (!header) return;
-          const value = row[fieldIndex + 4];
-          if (value !== null && value !== undefined && value !== '') {
-            fields[header] = value;
-          }
-        });
-
-        return {
-          source_row: Number(row[0]),
-          section: row[1] == null || row[1] === '' ? null : String(row[1]),
-          beat: row[2] == null || row[2] === '' ? null : String(row[2]),
-          year: row[3] == null || row[3] === '' ? null : String(row[3]),
-          fields,
-        };
-      });
-
-      return {
-        name,
-        tables: [{ headers: sheetHeaders, rows }],
-        record_count: rows.length,
-      };
-    }),
-  };
 }
 
 export default async function handler(req, res) {
@@ -124,14 +57,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const compactJson = await loadPayload(req);
-    const compact = JSON.parse(compactJson);
-    const data = expandDataset(compact);
+    const assetUrl = new URL(DATA_PATH, getOrigin(req));
+    const response = await fetch(assetUrl, { cache: 'no-store' });
 
-    if (data.sheets.length !== EXPECTED_SHEET_COUNT) {
-      throw new Error(
-        `Range dataset validation failed: expected ${EXPECTED_SHEET_COUNT} sheets, received ${data.sheets.length}.`,
-      );
+    if (!response.ok) {
+      throw new Error(`Range asset request failed (${response.status}).`);
+    }
+
+    const encoded = (await response.text()).trim();
+    if (!encoded || !encoded.startsWith('H4sI')) {
+      throw new Error('Range asset content is missing or invalid.');
+    }
+
+    const json = decodeRangeAsset(encoded);
+    const data = JSON.parse(json);
+    if (!data || !Array.isArray(data.sheets)) {
+      throw new Error('Range dataset structure is invalid.');
     }
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
