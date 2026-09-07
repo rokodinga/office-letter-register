@@ -1,0 +1,1 @@
+Range payload restoration is being finalized from verified Git objects.
