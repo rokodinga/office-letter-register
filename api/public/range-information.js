@@ -7,7 +7,6 @@ const PAYLOAD_PATHS = [
   '/data/range-brotli-04.b64',
 ];
 
-const EXPECTED_PAYLOAD_LENGTH = 26236;
 const EXPECTED_SHEET_COUNT = 29;
 
 function getOrigin(req) {
@@ -40,16 +39,15 @@ async function loadPayload(req) {
 
   const encoded = responses.join('');
 
-  if (
-    encoded.length !== EXPECTED_PAYLOAD_LENGTH ||
-    !encoded.startsWith('W7pjMjsYg/OA') ||
-    !encoded.endsWith('8XouOWVn1zw=')
-  ) {
-    throw new Error('Range data payload assembly failed validation.');
+  if (!encoded.startsWith('W7pjMjsYg/OA') || !encoded.endsWith('8XouOWVn1zw=')) {
+    throw new Error(`Range data payload assembly failed validation (assembled ${encoded.length} characters).`);
   }
 
-  const compressed = Buffer.from(encoded, 'base64');
-  return brotliDecompressSync(compressed).toString('utf8');
+  try {
+    return brotliDecompressSync(Buffer.from(encoded, 'base64')).toString('utf8');
+  } catch {
+    throw new Error(`Range data payload decompression failed (assembled ${encoded.length} characters).`);
+  }
 }
 
 function expandDataset(compact) {
