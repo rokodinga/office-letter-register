@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
-const DATA_FILE = 'public/data/kodinga-range-information-v2.gz.b64';
+const DATA_FILE = 'public/data/kodinga-range-information.json.gz.b64';
 
 function getAssetPath() {
   const roots = [process.cwd(), '/var/task'];
