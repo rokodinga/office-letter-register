@@ -2,19 +2,22 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
 
-const DATA_FILE = 'public/data/kodinga-range-information.json.gz.b64';
+const DATA_PARTS = [
+  'public/data/range-fixed-01.b64',
+  'public/data/range-fixed-02.b64',
+  'public/data/range-fixed-03.b64',
+  'public/data/range-fixed-04.b64',
+  'public/data/range-fixed-05.b64',
+];
 
-function getAssetPath() {
-  const candidates = [
-    join(process.cwd(), DATA_FILE),
-    join('/var/task', DATA_FILE),
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
+function getAssetPaths() {
+  const roots = [process.cwd(), '/var/task'];
+  for (const root of roots) {
+    const paths = DATA_PARTS.map(part => join(root, part));
+    if (paths.every(existsSync)) return paths;
   }
 
-  throw new Error(`Range dataset file is not bundled. Checked: ${candidates.join(', ')}`);
+  throw new Error(`Range dataset files are not bundled. Checked roots: ${roots.join(', ')}`);
 }
 
 function inflateGzipIgnoringChecksum(gzip) {
@@ -67,8 +70,8 @@ export default function handler(req, res) {
   let stage = 'asset-read';
 
   try {
-    const assetPath = getAssetPath();
-    const encoded = readFileSync(assetPath, 'utf8').trim();
+    const assetPaths = getAssetPaths();
+    const encoded = assetPaths.map(path => readFileSync(path, 'utf8').trim()).join('');
 
     if (!encoded || !encoded.startsWith('H4sI')) {
       throw new Error('Range asset content is missing or invalid.');
