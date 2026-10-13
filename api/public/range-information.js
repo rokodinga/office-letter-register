@@ -46,7 +46,7 @@ async function loadPayload(req) {
   const compressed = Buffer.from(encoded, 'base64');
   try {
     return brotliDecompressSync(compressed).toString('utf8');
-  } catch (brotliError) {
+  } catch {
     if (!encoded.startsWith('H4sI')) {
       throw new Error('Range data payload could not be decompressed.');
     }
