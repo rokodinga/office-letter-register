@@ -1,4 +1,4 @@
-import { brotliDecompressSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync, inflateRawSync } from 'node:zlib';
 
 const PAYLOAD_PATHS = [
   '/data/range-brotli-01.b64',
@@ -43,11 +43,27 @@ async function loadPayload(req) {
     throw new Error('Range data payload assembly failed validation.');
   }
 
+  const compressed = Buffer.from(encoded, 'base64');
   try {
-    const compressed = Buffer.from(encoded, 'base64');
     return brotliDecompressSync(compressed).toString('utf8');
   } catch {
-    throw new Error('Range data payload could not be decompressed.');
+    if (!encoded.startsWith('H4sI')) {
+      throw new Error('Range data payload could not be decompressed.');
+    }
+
+    try {
+      return gunzipSync(compressed).toString('utf8');
+    } catch (gzipError) {
+      if (!(gzipError instanceof Error) || !/incorrect data check|checksum/i.test(gzipError.message)) {
+        throw new Error('Range data payload could not be decompressed.');
+      }
+      if (compressed.length < 18) throw new Error('Range data payload could not be decompressed.');
+      try {
+        return inflateRawSync(compressed.subarray(10, -8)).toString('utf8');
+      } catch {
+        throw new Error('Range data payload could not be decompressed.');
+      }
+    }
   }
 }
 
