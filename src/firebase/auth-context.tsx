@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { auth, db } from './config';
 import {
-  createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword,
+  sendPasswordResetEmail, signInWithEmailAndPassword,
   signOut, onAuthStateChanged, updateProfile, updateEmail,
   reauthenticateWithCredential, EmailAuthProvider, updatePassword,
 } from 'firebase/auth';
@@ -19,7 +19,6 @@ export interface UserProfile {
 
 interface AuthContextType {
   user: User | null; userProfile: UserProfile | null; loading: boolean;
-  signup: (email: string, password: string, displayName: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>; logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
@@ -56,21 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return unsubscribe;
   }, []);
-
-  const signup = async (email: string, password: string, displayName: string) => {
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      const name = displayName.trim();
-      await updateProfile(credential.user, { displayName: name });
-      const profile: UserProfile = {
-        uid: credential.user.uid, displayName: name, email: credential.user.email || email.trim(),
-        photoURL: '', role: 'User', status: 'active',
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      };
-      await setDoc(doc(db, 'users', credential.user.uid), profile);
-      await credential.user.reload(); setUser(auth.currentUser); setUserProfile(profile);
-    } catch (error) { console.error('Signup error:', (error as AuthError).message); throw error; }
-  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -111,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updatePassword(auth.currentUser, newPassword);
   };
 
-  return <AuthContext.Provider value={{ user, userProfile, loading, signup, login, logout, resetPassword, updateUserProfile, changeEmail, changePassword }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, userProfile, loading, login, logout, resetPassword, updateUserProfile, changeEmail, changePassword }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {
   const context = useContext(AuthContext);
