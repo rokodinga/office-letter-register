@@ -31,14 +31,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 async function loadUserProfile(user: User): Promise<UserProfile> {
   const ref = doc(db, 'users', user.uid);
   const snapshot = await getDoc(ref);
-  if (snapshot.exists()) return snapshot.data() as UserProfile;
-  const profile: UserProfile = {
-    uid: user.uid, displayName: user.displayName || '', email: user.email || '',
-    photoURL: user.photoURL || '', role: 'User', status: 'active',
-    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-  };
-  await setDoc(ref, profile, { merge: true });
-  return profile;
+  if (!snapshot.exists()) {
+    throw new Error('This account has not been provisioned by an office administrator.');
+  }
+  return snapshot.data() as UserProfile;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -51,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (!currentUser) { setUser(null); setUserProfile(null); setLoading(false); return; }
         const profile = await loadUserProfile(currentUser);
-        if (profile.status === 'disabled') { await signOut(auth); setUser(null); setUserProfile(null); return; }
+        if (profile.status !== 'active') { await signOut(auth); setUser(null); setUserProfile(null); return; }
         setUser(currentUser); setUserProfile(profile);
       } catch (error) {
         console.error('Failed to load user profile:', error);
@@ -80,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const profile = await loadUserProfile(credential.user);
-      if (profile.status === 'disabled') { await signOut(auth); throw new Error('This account has been disabled. Please contact an administrator.'); }
+      if (profile.status !== 'active') { await signOut(auth); throw new Error('This account is not active. Please contact an office administrator.'); }
       setUser(credential.user); setUserProfile(profile);
     } catch (error) { console.error('Login error:', (error as AuthError).message); throw error; }
   };
