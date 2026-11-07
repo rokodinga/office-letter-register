@@ -42,7 +42,7 @@ export function LoginPage() {
                 <ShieldCheck size={23} />
               </div>
               <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">Office Letter Register</h2>
-              <p className="mt-1.5 text-sm text-slate-500">Secure sign in to your office portal</p>
+              <p className="mt-1.5 text-sm text-slate-500">Sign in to the private office register</p>
             </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -80,7 +80,7 @@ export function LoginPage() {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-gray-600">Don't have an account? <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-semibold">Sign up</Link></p>
+          <p className="text-sm text-gray-600">Access is restricted to accounts created by the office administrator. Contact your administrator if you need an account.</p>
           <div className="mt-4 flex justify-center gap-4 text-sm">
             <Link to="/privacy" className="text-blue-600 hover:text-blue-800">Privacy Policy</Link>
             <Link to="/terms" className="text-blue-600 hover:text-blue-800">Terms of Service</Link>
