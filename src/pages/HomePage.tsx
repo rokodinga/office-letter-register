@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -12,57 +11,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-const ODISHA_EMBLEM = 'https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png';
-
-type RegisterStats = {
-  incoming: number;
-  outgoing: number;
-  total: number;
-};
-
 export function HomePage() {
-  const [stats, setStats] = useState<RegisterStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadStats = async () => {
-      try {
-        const response = await fetch('/api/public/stats', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Unable to load register statistics.');
-
-        const data = await response.json();
-        if (!data?.ok) throw new Error('Unable to load register statistics.');
-
-        if (!cancelled) {
-          setStats({
-            incoming: Number(data.incoming || 0),
-            outgoing: Number(data.outgoing || 0),
-            total: Number(data.total || 0),
-          });
-        }
-      } catch {
-        // Keep the public landing page usable even if the stats endpoint is
-        // temporarily unavailable. The next polling cycle will retry.
-      } finally {
-        if (!cancelled) setStatsLoading(false);
-      }
-    };
-
-    loadStats();
-    const intervalId = window.setInterval(loadStats, 60_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  const incomingDisplay = statsLoading && !stats ? '—' : String(stats?.incoming ?? '—');
-  const outgoingDisplay = statsLoading && !stats ? '—' : String(stats?.outgoing ?? '—');
-  const totalDisplay = statsLoading && !stats ? '—' : String(stats?.total ?? '—');
-
   return (
     <div className="home-page min-h-screen overflow-hidden bg-slate-50 text-slate-900">
       <div className="home-orb home-orb-one" aria-hidden="true" />
@@ -71,19 +20,15 @@ export function HomePage() {
       <header className="home-header sticky top-0 z-50 border-b border-white/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6">
           <Link to="/" className="group flex min-w-0 items-center gap-3.5" aria-label="Forest Range Office Kodinga home">
-            <div className="home-emblem-wrap flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
-              <img
-                src={ODISHA_EMBLEM}
-                alt="Government of Odisha emblem"
-                className="h-10 w-10 object-contain"
-              />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700">
+              <LockKeyhole size={22} />
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-extrabold leading-tight text-blue-950 sm:text-base">
-                Forest, Environment &amp; Climate Change Department
+                Office Letter Register
               </div>
               <div className="text-xs font-semibold text-slate-500 sm:text-sm">
-                Govt of Odisha · Forest Range Office, Kodinga
+                Kodinga Forest Range · Private internal utility
               </div>
             </div>
           </Link>
@@ -125,12 +70,9 @@ export function HomePage() {
               >
                 Sign in to the register <ArrowRight size={18} />
               </Link>
-              <Link
-                to="/signup"
-                className="home-button-secondary inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 font-bold text-slate-800 shadow-sm"
-              >
-                Create an account
-              </Link>
+              <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-600">
+                Accounts issued by office administrator
+              </span>
             </div>
 
             <div className="home-fade-up home-delay-4 mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-semibold text-slate-500">
@@ -175,7 +117,7 @@ export function HomePage() {
                   <div className="home-mini-card rounded-2xl border border-blue-100 bg-blue-50/80 p-4">
                     <div className="flex items-center justify-between">
                       <Inbox size={19} className="text-blue-700" />
-                      <span className="text-2xl font-black tabular-nums text-slate-950">{incomingDisplay}</span>
+                      <span className="text-sm font-black text-slate-700">Restricted</span>
                     </div>
                     <p className="mt-4 text-sm font-bold text-slate-800">Incoming Dak</p>
                     <p className="mt-1 text-xs text-slate-500">Registered correspondence</p>
@@ -183,7 +125,7 @@ export function HomePage() {
                   <div className="home-mini-card rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4">
                     <div className="flex items-center justify-between">
                       <ArrowRight size={19} className="rotate-[-45deg] text-emerald-700" />
-                      <span className="text-2xl font-black tabular-nums text-slate-950">{outgoingDisplay}</span>
+                      <span className="text-sm font-black text-slate-700">Restricted</span>
                     </div>
                     <p className="mt-4 text-sm font-bold text-slate-800">Outgoing Letters</p>
                     <p className="mt-1 text-xs text-slate-500">Registered correspondence</p>
@@ -197,7 +139,7 @@ export function HomePage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-bold text-slate-900">Total registered records</p>
-                      <p className="text-xs text-slate-500">{totalDisplay} correspondence records</p>
+                      <p className="text-xs text-slate-500">Available to authorised office users after sign-in</p>
                     </div>
                     <ChevronRight size={18} className="text-slate-400" />
                   </div>
@@ -269,16 +211,14 @@ export function HomePage() {
               <p className="text-sm font-bold uppercase tracking-[0.14em] text-blue-300">Ready when you are</p>
               <h2 className="mt-2 text-2xl font-black sm:text-3xl">Keep your office correspondence organised.</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Sign in to continue managing the register or create an account if you are an authorised user.
+                Sign in with an account provisioned by the office administrator. This private utility is not a public government website.
               </p>
             </div>
             <div className="relative mt-6 flex shrink-0 flex-wrap gap-3 md:mt-0">
               <Link to="/login" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-bold text-slate-950 transition hover:-translate-y-0.5 hover:bg-blue-50">
                 Sign In <ArrowRight size={17} />
               </Link>
-              <Link to="/signup" className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 font-bold text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/15">
-                Create account
-              </Link>
+
             </div>
           </div>
         </section>
@@ -286,9 +226,8 @@ export function HomePage() {
 
       <footer className="border-t border-slate-200 bg-white/80">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 py-7 text-sm sm:px-6 md:flex-row">
-          <div className="flex items-center gap-3 text-slate-500">
-            <img src={ODISHA_EMBLEM} alt="" className="h-8 w-8 object-contain" aria-hidden="true" />
-            <span>Forest Range Office, Kodinga · Govt of Odisha</span>
+          <div className="text-center text-xs text-slate-500 md:text-left">
+            Private internal administrative utility · Not an official public Government of Odisha website
           </div>
           <nav className="flex flex-wrap justify-center gap-5 font-semibold text-blue-700" aria-label="Footer navigation">
             <Link to="/privacy" className="transition hover:text-blue-950">Privacy Policy</Link>
