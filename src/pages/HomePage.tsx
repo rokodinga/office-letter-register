@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+
+const ODISHA_EMBLEM = 'https://upload.wikimedia.org/wikipedia/commons/f/fe/Seal_of_Odisha.png';
 import {
   ArrowRight,
   FileSpreadsheet,
@@ -20,15 +22,15 @@ export function HomePage() {
       <header className="home-header sticky top-0 z-50 border-b border-white/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6">
           <Link to="/" className="group flex min-w-0 items-center gap-3.5" aria-label="Forest Range Office Kodinga home">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700">
-              <LockKeyhole size={22} />
+            <div className="home-emblem-wrap flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white shadow-sm">
+              <img src={ODISHA_EMBLEM} alt="Government of Odisha emblem" className="h-10 w-10 object-contain" />
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-extrabold leading-tight text-blue-950 sm:text-base">
-                Office Letter Register
+                Forest, Environment &amp; Climate Change Department
               </div>
               <div className="text-xs font-semibold text-slate-500 sm:text-sm">
-                Kodinga Forest Range · Private internal utility
+                Govt of Odisha · Forest Range Office, Kodinga
               </div>
             </div>
           </Link>
@@ -227,7 +229,8 @@ export function HomePage() {
       <footer className="border-t border-slate-200 bg-white/80">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 py-7 text-sm sm:px-6 md:flex-row">
           <div className="text-center text-xs text-slate-500 md:text-left">
-            Private internal administrative utility · Not an official public Government of Odisha website
+<img src={ODISHA_EMBLEM} alt="" className="h-8 w-8 object-contain" aria-hidden="true" />
+            <span>Forest Range Office, Kodinga · Govt of Odisha</span>
           </div>
           <nav className="flex flex-wrap justify-center gap-5 font-semibold text-blue-700" aria-label="Footer navigation">
             <Link to="/privacy" className="transition hover:text-blue-950">Privacy Policy</Link>
