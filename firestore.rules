@@ -6,21 +6,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function activeUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator'
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
     }
 
+    function isAdmin() {
+      return activeUser()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator';
+    }
+
     match /users/{userId} {
-      allow create: if signedIn() && request.auth.uid == userId
-        && request.resource.data.uid == userId
-        && request.resource.data.role == 'User'
-        && request.resource.data.status == 'active';
-
+      // User profiles are provisioned only by the trusted server-side admin API.
+      allow create: if false;
       allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
-
       allow update: if signedIn() && (
         (
           request.auth.uid == userId
@@ -28,13 +28,8 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
           && request.resource.data.status == resource.data.status
         )
-        ||
-        (
-          isAdmin()
-          && userId != request.auth.uid
-        )
+        || (isAdmin() && userId != request.auth.uid)
       );
-
       allow delete: if isAdmin() && userId != request.auth.uid;
     }
 
@@ -43,7 +38,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Gmail review queues are administrator-only.
     match /gmailInbox/{messageId} {
       allow read, write: if isAdmin();
     }
@@ -52,18 +46,17 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Gmail OAuth refresh tokens are server-side only.
     match /gmailConnections/{connectionId} {
       allow read, write: if false;
     }
 
     match /incomingLetters/{letterId} {
-      allow read: if signedIn();
+      allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
 
     match /outgoingLetters/{letterId} {
-      allow read: if signedIn();
+      allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
   }
